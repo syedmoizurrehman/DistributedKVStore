@@ -6,15 +6,20 @@ using System.Text;
 using System.Threading.Tasks;
 using NetworkLayer;
 
-namespace DistributedKVStore
+using AppProperties = AppUtilities.Properties;
+
+namespace ApplicationLayer
 {
     public enum NodeStatus
     {
-        Coordinator = 1,
-        Node = 2,
+        Node = 1,
+        Coordinator = 2,
         Client = 3
     }
 
+    /// <summary>
+    /// Represents an instance of this application running on a network node.
+    /// </summary>
     public class Node
     {
         private readonly Action Initiated;
@@ -31,35 +36,35 @@ namespace DistributedKVStore
         /// </summary>
         public IPAddress Address { get; }
 
+        /// <summary>
+        /// IPv4 Addresses of all the <see cref="Node"/>s in the network.
+        /// </summary>
+        public IPAddress[] NodeNetwork { get; }
+
         static int HashFunction(int ringSize, string key) => key.GetHashCode() % ringSize;
 
-        public Node(IPAddress address)
+        public Node(IPAddress address, IPAddress[] nodeNetwork, bool shouldPoll = true)
         {
             Initiated = new Action(InitiatePolling);
             Address = address;
-            PollDelay = 5000;
-            Initiated();
+            PollDelay = 500;
+            if (shouldPoll)
+                Initiated();
+        }
+
+        public Task Send(Node receiver, string message)
+        {
+            return Network.SendAsync(receiver.Address, AppProperties.PortNumber, message);
         }
 
         private async void InitiatePolling()
         {
             while (true)
             {
-                await Network.ReceiveAsync(Address, 11000).ConfigureAwait(false);
-                await Task.Delay(PollDelay).ConfigureAwait(false);
+                var T = Network.ListenAsync(AppProperties.PortNumber);
+                await T;
+                await Task.Delay(PollDelay);
             }
-        }
-    }
-
-    static class Program
-    {
-        static async Task Main(string[] args)
-        {
-            Node This = new Node(IPAddress.Parse("127.0.0.1"));
-            if (args[0].Equals("-coord"))
-                This.Status = NodeStatus.Coordinator;
-
-            Console.ReadKey();
         }
     }
 }

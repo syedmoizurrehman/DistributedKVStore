@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>ApplicationLayer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ApplicationUtilities\ApplicationUtilities.csproj" />
+    <ProjectReference Include="..\NetworkLayer\NetworkLayer.csproj" />
+  </ItemGroup>
+
+</Project>
