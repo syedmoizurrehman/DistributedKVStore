@@ -21,7 +21,6 @@ namespace Coordinator
             Node This = new Node(IPAddress.Parse("127.0.0.1"), Network);
 
             Node Client = new Node(IPAddress.Parse("127.0.0.1"), Network, false);
-
             await Task.Run(() => Client.Send(This, "Sent from client."));
         }
     }

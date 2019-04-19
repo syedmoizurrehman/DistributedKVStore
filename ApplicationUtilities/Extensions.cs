@@ -72,6 +72,5 @@ namespace AppUtilities
             }, null);
             await SendTaskCompletion.Task;
         }
-
     }
 }

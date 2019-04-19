@@ -43,12 +43,12 @@ namespace ApplicationLayer
 
         static int HashFunction(int ringSize, string key) => key.GetHashCode() % ringSize;
 
-        public Node(IPAddress address, IPAddress[] nodeNetwork, bool shouldPoll = true)
+        public Node(IPAddress address, IPAddress[] nodeNetwork, bool startPolling = true)
         {
             Initiated = new Action(InitiatePolling);
             Address = address;
             PollDelay = 500;
-            if (shouldPoll)
+            if (startPolling)
                 Initiated();
         }
 

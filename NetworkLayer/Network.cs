@@ -9,6 +9,13 @@ namespace NetworkLayer
 {
     public static class Network
     {
+        /// <summary>
+        /// Sends a message to the specified address asynchronously.
+        /// </summary>
+        /// <param name="receiverAddress"></param>
+        /// <param name="port"></param>
+        /// <param name="message"></param>
+        /// <returns></returns>
         public static async Task SendAsync(IPAddress receiverAddress, int port, string message)
         {
             IPEndPoint remoteEndPoint = new IPEndPoint(receiverAddress, port);
