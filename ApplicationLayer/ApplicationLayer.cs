@@ -95,15 +95,15 @@ namespace ApplicationLayer
                         NodeNetwork.Add(new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress });
                         await NodeNetwork[0].Initialize();
                         await SendJoinRequest();
-                        Message M = await ListenAsync();
-                        if (M.Type == MessageType.JoinResponse)
-                        {
-                            Index = M.NewNode.Index;
-                            for (int i = 0; i < M.Network.Length; i++)
-                                NodeNetwork.Add(M.Network[i]);
+                        Message M;
+                        do M = await ListenAsync();
+                        while (M.Type != MessageType.JoinResponse);
 
-                            //NodeNetwork = M.Network.ToList();
-                        }
+                        Index = M.NewNode.Index;
+                        for (int i = 0; i < M.Network.Length; i++)
+                            NodeNetwork.Add(M.Network[i]);
+
+                        //NodeNetwork = M.Network.ToList();
                         break;
                 }
             }
