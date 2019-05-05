@@ -27,7 +27,6 @@ namespace Coordinator
             {
                 This = new Node(IPAddress.Parse(CoordinatorAddress), true);
                 await This.Initialize();
-
                 string Input = string.Empty;
                 switch (This.Status)
                 {

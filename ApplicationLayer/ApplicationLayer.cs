@@ -124,7 +124,7 @@ namespace ApplicationLayer
             }
         }
 
-        public void Write(string key, string value)
+        public Task Write(string key, string value)
         {
             throw new NotImplementedException();
         }
@@ -258,6 +258,9 @@ namespace ApplicationLayer
 
         internal Task InitiateGossip(Node newNode)
         {
+            if (NodeNetwork.Count < 3)
+                return null;
+
             // Send a random node the information of the new node.
             int RandomNodeIndex;
             do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(NodeNetwork.Count);
