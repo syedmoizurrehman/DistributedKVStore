@@ -218,11 +218,11 @@ namespace ApplicationLayer
                     break;
 
                 case MessageType.JoinResponse:
-                    Obj.Append("NEW-ID:").AppendLine(NewNode.Index.ToString());         // The id indicating the index of new node in network array.
+                    Obj.Append("NEW-ID:").AppendLine(NewNode.Index.ToString());         // The id indicating the index of new node in network array. This will be used to get info. of new node from network sent with this message.
                     break;
 
                 case MessageType.JoinIntroduction:
-                    Obj.Append("NEW-ID:").AppendLine(NewNode.Index.ToString());         // The id indicating the index of new node in network array.
+                    Obj.Append("NEW-ID:").AppendLine(NewNode.Index.ToString());         // The id indicating the index of new node in network array. This will be used to get info. of new node from network sent with this message.
                     break;
             }
             return Obj.ToString();
@@ -268,11 +268,11 @@ namespace ApplicationLayer
                             for (int i = 0; i < NewMessage.Network.Length; i++)
                             {
                                 var N = new Node();
-                                Line = Reader.ReadLine();
+                                Line = Reader.ReadLine().Split(':')[1].Trim();
                                 N.Index = Convert.ToInt32(Line);
-                                Line = Reader.ReadLine();
+                                Line = Reader.ReadLine().Split(':')[1].Trim();
                                 N.Status = (NodeStatus)Enum.Parse(typeof(NodeStatus), Line);
-                                Line = Reader.ReadLine();
+                                Line = Reader.ReadLine().Split(':')[1].Trim();
                                 N.Address = IPAddress.Parse(Line);
                                 NewMessage.Network[i] = N;
                             }
