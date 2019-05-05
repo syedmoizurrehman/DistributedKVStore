@@ -43,9 +43,9 @@ namespace ApplicationLayer
         public IPAddress Address { get; internal set; }
 
         /// <summary>
-        /// Represents all the <see cref="Node"/>s in the network. First item will always be coordinator.
+        /// Represents all the <see cref="Node"/>s in the network. First item (Key: 0) will always be coordinator.
         /// </summary>
-        public List<Node> NodeNetwork { get; }
+        public Dictionary<int, Node> NodeNetwork { get; }
 
         /// <summary>
         /// Gets whether this node represents this machine or any other machine in the network.
@@ -63,7 +63,7 @@ namespace ApplicationLayer
 
         public Node(IPAddress coordAddress, bool isHost = false, bool isClient = false)
         {
-            NodeNetwork = new List<Node>();
+            NodeNetwork = new Dictionary<int, Node>();
             //Initiated = new Action(Initialize);
 
             Index = -1;                             // -1 indicated unassigned ID.
@@ -87,13 +87,13 @@ namespace ApplicationLayer
                     case NodeStatus.Coordinator:
                         Index = 0;
                         // Add coordinator to network list.
-                        NodeNetwork.Add(this);
+                        NodeNetwork.Add(Index, this);
                         // Start Listening for client's request.
                         //await Network.ListenAsync(AppProperties.PortNumber);      // Debugging: Client's request will be received from console.
                         break;
 
                     case NodeStatus.Node:   // Only knows Coord's IP, nothing about the node network at this point.
-                        NodeNetwork.Add(new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress });
+                        NodeNetwork.Add(0, new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress });
                         await NodeNetwork[0].Initialize();
                         await SendJoinRequest();
                         Message M;
@@ -101,10 +101,13 @@ namespace ApplicationLayer
                         while (M.Type != MessageType.JoinResponse);
 
                         Index = M.NewNode.Index;
-                        for (int i = 0; i < M.Network.Length; i++)
-                            NodeNetwork.Add(M.Network[i]);
-
-                        //NodeNetwork = M.Network.ToList();
+                        for (int i = 0; i < M.Network.Count; i++)
+                        {
+                            if (NodeNetwork.ContainsKey(M.Network[i].Index))
+                                NodeNetwork[M.Network[i].Index] = M.Network[i];
+                            else
+                                NodeNetwork.Add(M.Network[i].Index, M.Network[i]);
+                        }
                         break;
                 }
                 await Poll();
@@ -134,7 +137,7 @@ namespace ApplicationLayer
             for (int i = 0; i < AppProperties.RingSize; i++)
             {
                 int ReplicaNodeIndex = HashFunction(key);
-                var M = Message.ConstructKeyRequest(this, NodeNetwork[i], NodeNetwork.ToArray(), key);
+                var M = Message.ConstructKeyRequest(this, NodeNetwork[i], NodeNetwork, key);
                 SendAsync(ReplicaNodeIndex, M);
             }
         }
@@ -150,7 +153,7 @@ namespace ApplicationLayer
         /// <returns></returns>
         public Task SendJoinResponse()
         {
-            return SendAsync(NodeNetwork.Count - 1, Message.ConstructJoinResponse(this, NodeNetwork[NodeNetwork.Count - 1], NodeNetwork.ToArray()));
+            return SendAsync(NodeNetwork.Count - 1, Message.ConstructJoinResponse(this, NodeNetwork[NodeNetwork.Count - 1], NodeNetwork));
         }
 
         /// <summary>
@@ -159,12 +162,12 @@ namespace ApplicationLayer
         /// <returns></returns>
         public Task SendIntroduction(int nodeIndex)
         {
-            return SendAsync(nodeIndex, Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork.ToArray(), NodeNetwork.Count - 1));
+            return SendAsync(nodeIndex, Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork, NodeNetwork.Count - 1));
         }
 
         public Task Ping(int targetNodeIndex)
         {
-            return SendAsync(targetNodeIndex, Message.ConstructPing(this, NodeNetwork[targetNodeIndex], NodeNetwork.ToArray()));
+            return SendAsync(targetNodeIndex, Message.ConstructPing(this, NodeNetwork[targetNodeIndex], NodeNetwork));
         }
 
         public Task SendAsync(int nodeIndex, Message message)
@@ -203,7 +206,10 @@ namespace ApplicationLayer
                                 N.Status = NodeStatus.Node;
                                 N.CoordinatorAddress = Address;
                                 N.NodeNetwork?.Clear();   // Networks of other nodes are not stored.
-                                NodeNetwork.Add(N);
+                                if (NodeNetwork.ContainsKey(N.Index))
+                                    NodeNetwork[N.Index] = N;
+                                else
+                                    NodeNetwork.Add(N.Index, N);
                                 await SendJoinResponse();
                                 await InitiateGossip(N);
                                 break;

@@ -76,7 +76,7 @@ namespace ApplicationLayer
 
         public Node Destination { get; private set; }
 
-        public Node[] Network { get; private set; }
+        public Dictionary<int, Node> Network { get; private set; }
 
         public Node NewNode { get; private set; }
 
@@ -96,14 +96,15 @@ namespace ApplicationLayer
         /// <returns></returns>
         public static Message ConstructJoinRequest(Node source, Node coordinator)
         {
-            var Obj = new Message
+            var Msg = new Message
             {
                 Type = MessageType.JoinRequest,
                 Source = source,
                 Destination = coordinator,
             };
-            Obj.Network = new Node[1] { coordinator };
-            return Obj;
+            Msg.Network = new Dictionary<int, Node>(1);
+            Msg.Network.Add(0, coordinator);
+            return Msg;
         }
 
         /// <summary>
@@ -114,17 +115,17 @@ namespace ApplicationLayer
         /// <param name="nodeNetwork"></param>
         /// <param name="newNodeIndex">The index of new node in the node network array.</param>
         /// <returns></returns>
-        public static Message ConstructJoinIntroduction(Node source, Node destination, Node[] nodeNetwork, int newNodeIndex)
+        public static Message ConstructJoinIntroduction(Node source, Node destination, Dictionary<int, Node> nodeNetwork, int newNodeIndex)
         {
-            var Obj = new Message
+            var Msg = new Message
             {
                 Type = MessageType.JoinIntroduction,
                 Source = source,
                 Destination = destination,
                 Network = nodeNetwork,
             };
-            Obj.NewNode = Obj.Network[newNodeIndex];
-            return Obj;
+            Msg.NewNode = Msg.Network[newNodeIndex];
+            return Msg;
         }
 
         /// <summary>
@@ -135,7 +136,7 @@ namespace ApplicationLayer
         /// <param name="nodeNetwork"></param>
         /// <param name="key"></param>
         /// <returns></returns>
-        public static Message ConstructKeyRequest(Node source, Node destination, Node[] nodeNetwork, string key)
+        public static Message ConstructKeyRequest(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key)
         {
             return new Message
             {
@@ -154,7 +155,7 @@ namespace ApplicationLayer
         /// <param name="destination"></param>
         /// <param name="nodeNetwork"></param>
         /// <returns></returns>
-        public static Message ConstructPing(Node source, Node destination, Node[] nodeNetwork)
+        public static Message ConstructPing(Node source, Node destination, Dictionary<int, Node> nodeNetwork)
         {
             return new Message()
             {
@@ -172,7 +173,7 @@ namespace ApplicationLayer
         /// <param name="nodeNetwork"></param>
         /// <param name="newNodeIndex">The index of new node in the node network array.</param>
         /// <returns></returns>
-        public static Message ConstructJoinResponse(Node coordinator, Node newNode, Node[] nodeNetwork)
+        public static Message ConstructJoinResponse(Node coordinator, Node newNode, Dictionary<int, Node> nodeNetwork)
         {
             var Obj = new Message
             {
@@ -202,10 +203,10 @@ namespace ApplicationLayer
             Obj.Append("DESTINATION:").AppendLine(Destination.Address.ToString());
             Obj.Append("TYPE:").AppendLine(Type.ToString());
             Obj.Append("NODE-ID:").AppendLine(Source.Index.ToString());     // ID of Source node.
-            Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? Network.Length.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared.
+            Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? Network.Count.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared.
             if (shareNetwork)
             {
-                for (int i = 0; i < Network.Length; i++)
+                for (int i = 0; i < Network.Count; i++)
                 {
                     Obj.Append("ID:").AppendLine(Network[i].Index.ToString());
                     Obj.Append("STATUS:").AppendLine(Network[i].Status.ToString());
@@ -294,11 +295,11 @@ namespace ApplicationLayer
                         case 5:
                             var Count = Convert.ToInt32(Line);
                             if (Count != -1)
-                                NewMessage.Network = new Node[Count];
+                                NewMessage.Network = new Dictionary<int, Node>(Count);
                             else
                                 break;
 
-                            for (int i = 0; i < NewMessage.Network.Length; i++)
+                            for (int i = 0; i < NewMessage.Network.Count; i++)
                             {
                                 var N = new Node();
                                 Line = Reader.ReadLine().Split(':')[1].Trim();
@@ -309,7 +310,7 @@ namespace ApplicationLayer
                                 N.Address = IPAddress.Parse(Line);
                                 NewMessage.Network[i] = N;
                             }
-                            LineNo += NewMessage.Network.Length * 3;
+                            LineNo += NewMessage.Network.Count * 3;
                             break;
 
                         default:
