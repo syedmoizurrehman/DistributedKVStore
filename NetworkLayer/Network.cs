@@ -1,6 +1,7 @@
 ﻿using AppUtilities;
 using System;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,21 +11,68 @@ namespace NetworkLayer
     public static class Network
     {
         /// <summary>
+        /// Returns <see cref="IPAddress"/> of this machine.
+        /// </summary>
+        /// <returns></returns>
+        public static IPAddress GetHostIPAddress()
+        {
+            UnicastIPAddressInformation MostSuitableIp = null;
+
+            foreach (NetworkInterface Network in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (Network.OperationalStatus != OperationalStatus.Up)
+                    continue;
+
+                var Properties = Network.GetIPProperties();
+
+                if (Properties.GatewayAddresses.Count == 0)
+                    continue;
+
+                foreach (UnicastIPAddressInformation Address in Properties.UnicastAddresses)
+                {
+                    if (Address.Address.AddressFamily != AddressFamily.InterNetwork)
+                        continue;
+
+                    if (IPAddress.IsLoopback(Address.Address))
+                        continue;
+
+                    if (!Address.IsDnsEligible)
+                    {
+                        if (MostSuitableIp == null)
+                            MostSuitableIp = Address;
+                        continue;
+                    }
+
+                    // The best IP is the IP got from DHCP server
+                    if (Address.PrefixOrigin != PrefixOrigin.Dhcp)
+                    {
+                        if (MostSuitableIp == null || !MostSuitableIp.IsDnsEligible)
+                            MostSuitableIp = Address;
+                        continue;
+                    }
+
+                    return Address.Address;
+                }
+            }
+
+            return MostSuitableIp?.Address;
+        }
+
+        /// <summary>
         /// Sends a message to the specified address asynchronously.
         /// </summary>
         /// <param name="receiverAddress"></param>
         /// <param name="port"></param>
         /// <param name="message"></param>
         /// <returns></returns>
-        public static async Task SendAsync(IPAddress receiverAddress, int port, string message)
+        public static async Task SendAsync(IPAddress receiverAddress, int port, byte[] message)
         {
             IPEndPoint remoteEndPoint = new IPEndPoint(receiverAddress, port);
 
             var ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             await ClientSocket.ConnectAsync(remoteEndPoint);
-            byte[] Data = Encoding.ASCII.GetBytes(message);
 
-            await ClientSocket.SendAsync(Data);
+            await ClientSocket.SendAsync(message);
 
             ClientSocket.Shutdown(SocketShutdown.Both);
             ClientSocket.Close();
@@ -35,7 +83,7 @@ namespace NetworkLayer
         /// </summary>
         /// <param name="port"></param>
         /// <returns></returns>
-        public static async Task<string> ListenAsync(int port)
+        public static async Task<byte[]> ListenAsync(int port)
         {
             IPEndPoint LocalEndPoint = new IPEndPoint(IPAddress.Any, port);
             Socket SenderSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -46,7 +94,7 @@ namespace NetworkLayer
             int X = await HandlerSocket.ReceiveAsync(Buffer);
             Console.WriteLine(X + " bytes received.");
             Console.WriteLine(Encoding.ASCII.GetString(Buffer));
-            return Encoding.ASCII.GetString(Buffer);
+            return Buffer;
         }
     }
 }

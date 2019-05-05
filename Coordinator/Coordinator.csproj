@@ -54,7 +54,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ApplicationDriver\ApplicationLayer.csproj">
+    <ProjectReference Include="..\ApplicationLayer\ApplicationLayer.csproj">
       <Project>{60043454-420c-49da-a075-b6c180923104}</Project>
       <Name>ApplicationLayer</Name>
     </ProjectReference>

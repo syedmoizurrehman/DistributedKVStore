@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetworkLayer", "NetworkLaye
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Coordinator", "Coordinator\Coordinator.csproj", "{B12D276E-C449-4716-B424-85EF4150D6D0}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ApplicationLayer", "ApplicationDriver\ApplicationLayer.csproj", "{60043454-420C-49DA-A075-B6C180923104}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ApplicationLayer", "ApplicationLayer\ApplicationLayer.csproj", "{60043454-420C-49DA-A075-B6C180923104}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApplicationUtilities", "ApplicationUtilities\ApplicationUtilities.csproj", "{BD954D0A-46F5-465D-81CF-EA78361BB65A}"
 EndProject
