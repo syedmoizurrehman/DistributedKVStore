@@ -1,5 +1,6 @@
 ﻿using AppUtilities;
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -85,16 +86,20 @@ namespace NetworkLayer
         /// <returns></returns>
         public static async Task<byte[]> ListenAsync(int port)
         {
+            var Buffer = new byte[1000];
             IPEndPoint LocalEndPoint = new IPEndPoint(IPAddress.Any, port);
             Socket SenderSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             SenderSocket.Bind(LocalEndPoint);
             SenderSocket.Listen(100);
             Socket HandlerSocket = await SenderSocket.AcceptAsync();
-            var Buffer = new byte[30];
             int X = await HandlerSocket.ReceiveAsync(Buffer);
             Console.WriteLine(X + " bytes received.");
             Console.WriteLine(Encoding.ASCII.GetString(Buffer));
-            return Buffer;
+            //SenderSocket.Shutdown(SocketShutdown.Both);
+            SenderSocket.Close();
+            byte[] ActualDataReceived = new byte[X];
+            Array.Copy(Buffer, 0, ActualDataReceived, 0, X);
+            return ActualDataReceived;
         }
     }
 }
