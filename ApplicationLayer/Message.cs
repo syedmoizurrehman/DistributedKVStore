@@ -48,6 +48,21 @@ namespace ApplicationLayer
         /// The message sent from Coordinator to introduce a newly up node in network.
         /// </summary>
         JoinIntroduction,
+
+        /// <summary>
+        /// Request from Coordinator containing data to be written to a node
+        /// </summary>
+        WriteRequest,
+
+        /// <summary>
+        /// Acknowledgement of WriteRequest from the node indicating successful write.
+        /// </summary>
+        WriteAcknowledgement,
+
+        /// <summary>
+        /// Message from any node indicating a failure to execute a requested operation.
+        /// </summary>
+        FailureIndication,
     }
 
     /// <summary>
@@ -68,6 +83,8 @@ namespace ApplicationLayer
         public string Key { get; private set; }
 
         public string Value { get; private set; }
+
+        public string FailureMessage { get; private set; }
 
         public DateTimeOffset KeyTimestamp { get; private set; }
 
@@ -173,6 +190,11 @@ namespace ApplicationLayer
             //Network = new List<Node>();
         }
 
+        /// <summary>
+        /// Returns a string representation of this Message object.
+        /// </summary>
+        /// <param name="shareNetwork"></param>
+        /// <returns></returns>
         public string Serialize(bool shareNetwork = true)
         {
             StringBuilder Obj = new StringBuilder();
@@ -185,7 +207,6 @@ namespace ApplicationLayer
             {
                 for (int i = 0; i < Network.Length; i++)
                 {
-                    //Obj.Append(i).AppendLine(":");
                     Obj.Append("ID:").AppendLine(Network[i].Index.ToString());
                     Obj.Append("STATUS:").AppendLine(Network[i].Status.ToString());
                     Obj.Append("ADDRESS:").AppendLine(Network[i].Address.ToString());
@@ -223,6 +244,18 @@ namespace ApplicationLayer
 
                 case MessageType.JoinIntroduction:
                     Obj.Append("NEW-ID:").AppendLine(NewNode.Index.ToString());         // The id indicating the index of new node in network array. This will be used to get info. of new node from network sent with this message.
+                    break;
+
+                case MessageType.WriteRequest:
+                    Obj.Append("KEY: ").AppendLine(Key);
+                    Obj.Append("VALUE: ").AppendLine(Value);
+                    break;
+
+                case MessageType.WriteAcknowledgement:
+                    break;
+
+                case MessageType.FailureIndication:
+                    Obj.Append("FAILED:").AppendLine(FailureMessage);
                     break;
             }
             return Obj.ToString();
@@ -284,22 +317,38 @@ namespace ApplicationLayer
                             {
                                 case MessageType.KeyRequest:
                                     NewMessage.Key = Line; break;
+
                                 case MessageType.KeyAcknowledgement:
                                     NewMessage.Key = Line;
                                     NewMessage.KeyTimestamp = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Line));
                                     break;
+
                                 case MessageType.KeyQuery:
                                     NewMessage.Key = Line; break;
+
                                 case MessageType.ValueResponse:
                                     NewMessage.Value = Line; break;
+
                                 case MessageType.Ping:
                                     break;
+
                                 case MessageType.JoinRequest:
                                     break;
+
                                 case MessageType.JoinResponse:
                                     NewMessage.NewNode = new Node { Index = Convert.ToInt32(Line) }; break;
+
                                 case MessageType.JoinIntroduction:
                                     NewMessage.NewNode = new Node { Index = Convert.ToInt32(Line) }; break;
+
+                                case MessageType.WriteRequest:
+                                    NewMessage.Key = Line; break;
+
+                                case MessageType.WriteAcknowledgement:
+                                    break;
+
+                                case MessageType.FailureIndication:
+                                    NewMessage.FailureMessage = Line; break;
                             }
                             break;
                     }

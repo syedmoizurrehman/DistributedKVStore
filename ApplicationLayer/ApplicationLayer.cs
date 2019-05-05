@@ -259,7 +259,7 @@ namespace ApplicationLayer
         internal Task InitiateGossip(Node newNode)
         {
             if (NodeNetwork.Count < 3)
-                return null;
+                return Task.CompletedTask;
 
             // Send a random node the information of the new node.
             int RandomNodeIndex;
