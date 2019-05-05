@@ -92,6 +92,8 @@ namespace ApplicationLayer
                         break;
 
                     case NodeStatus.Node:   // Only knows Coord's IP, nothing about the node network at this point.
+                        NodeNetwork.Add(new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress });
+                        await NodeNetwork[0].Initialize();
                         await SendJoinRequest();
                         Message M = await ListenAsync();
                         if (M.Type == MessageType.JoinResponse)
@@ -102,6 +104,20 @@ namespace ApplicationLayer
 
                             //NodeNetwork = M.Network.ToList();
                         }
+                        break;
+                }
+            }
+
+            else
+            {
+                switch (Status)
+                {
+                    case NodeStatus.Node:
+                        break;
+                    case NodeStatus.Coordinator:
+                        Index = 0;
+                        break;
+                    case NodeStatus.Client:
                         break;
                 }
             }
