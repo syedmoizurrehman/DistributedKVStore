@@ -24,9 +24,16 @@ namespace DataAccess
         {
             var FilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "KVDatabase.db");
             Database = new SQLiteAsyncConnection(FilePath);
-
-            var SyncDb = new SQLiteConnection(FilePath, SQLiteOpenFlags.ReadWrite);
-            SyncDb.CreateTable<KVTable>();
+            if (File.Exists(FilePath))
+            {
+                var SyncDb = new SQLiteConnection(FilePath, SQLiteOpenFlags.ReadWrite);
+                SyncDb.CreateTable<KVTable>();
+            }
+            else
+            {
+                var SyncDb = new SQLiteConnection(FilePath);
+                SyncDb.CreateTable<KVTable>();
+            }
         }
 
         public static async Task InsertKeyValuePairAsync(string key, string value)
