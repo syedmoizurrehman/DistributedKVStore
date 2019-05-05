@@ -10,21 +10,30 @@ namespace NetworkLayer
     public static class Network
     {
         /// <summary>
+        /// Returns <see cref="IPAddress"/> of this machine.
+        /// </summary>
+        /// <returns></returns>
+        public static async Task<IPAddress> GetIPAddress()
+        {
+            IPHostEntry X = await Dns.GetHostEntryAsync(Dns.GetHostName()).ConfigureAwait(false);
+            return X.AddressList[0];
+        }
+
+        /// <summary>
         /// Sends a message to the specified address asynchronously.
         /// </summary>
         /// <param name="receiverAddress"></param>
         /// <param name="port"></param>
         /// <param name="message"></param>
         /// <returns></returns>
-        public static async Task SendAsync(IPAddress receiverAddress, int port, string message)
+        public static async Task SendAsync(IPAddress receiverAddress, int port, byte[] message)
         {
             IPEndPoint remoteEndPoint = new IPEndPoint(receiverAddress, port);
 
             var ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             await ClientSocket.ConnectAsync(remoteEndPoint);
-            byte[] Data = Encoding.ASCII.GetBytes(message);
 
-            await ClientSocket.SendAsync(Data);
+            await ClientSocket.SendAsync(message);
 
             ClientSocket.Shutdown(SocketShutdown.Both);
             ClientSocket.Close();
@@ -35,7 +44,7 @@ namespace NetworkLayer
         /// </summary>
         /// <param name="port"></param>
         /// <returns></returns>
-        public static async Task<string> ListenAsync(int port)
+        public static async Task<byte[]> ListenAsync(int port)
         {
             IPEndPoint LocalEndPoint = new IPEndPoint(IPAddress.Any, port);
             Socket SenderSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -46,7 +55,7 @@ namespace NetworkLayer
             int X = await HandlerSocket.ReceiveAsync(Buffer);
             Console.WriteLine(X + " bytes received.");
             Console.WriteLine(Encoding.ASCII.GetString(Buffer));
-            return Encoding.ASCII.GetString(Buffer);
+            return Buffer;
         }
     }
 }
