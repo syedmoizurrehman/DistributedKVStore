@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using AppUtilities;
 using NetworkLayer;
 
 using AppProperties = AppUtilities.Properties;
@@ -106,8 +107,8 @@ namespace ApplicationLayer
                         }
                         break;
                 }
+                await Poll();
             }
-
             else
             {
                 switch (Status)
@@ -138,9 +139,27 @@ namespace ApplicationLayer
             }
         }
 
-        public async Task SendJoinRequest()
+        public Task SendJoinRequest()
         {
-            await SendAsync(0, Message.ConstructJoinRequest(this, NodeNetwork[0]));
+            return SendAsync(0, Message.ConstructJoinRequest(this, NodeNetwork[0]));
+        }
+
+        /// <summary>
+        /// Sends to the node added most recently to the network of nodes.
+        /// </summary>
+        /// <returns></returns>
+        public Task SendJoinResponse()
+        {
+            return SendAsync(NodeNetwork.Count - 1, Message.ConstructJoinResponse(this, NodeNetwork[NodeNetwork.Count - 1], NodeNetwork.ToArray()));
+        }
+
+        /// <summary>
+        /// Introduces the most recently added node.
+        /// </summary>
+        /// <returns></returns>
+        public Task SendIntroduction(int nodeIndex)
+        {
+            return SendAsync(nodeIndex, Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork.ToArray(), NodeNetwork.Count - 1));
         }
 
         public Task Ping(int targetNodeIndex)
@@ -159,14 +178,92 @@ namespace ApplicationLayer
             return Message.Deserialize(Encoding.ASCII.GetString(Result));
         }
 
-        private async void InitiatePolling()
+        /// <summary>
+        /// Keep listening, respond if a message is received, continue listening.
+        /// </summary>
+        private async Task Poll()
         {
-            while (true)
+            switch (Status)
             {
-                var T = Network.ListenAsync(AppProperties.PortNumber);
-                await T;
-                await Task.Delay(PollDelay);
+                case NodeStatus.Coordinator:
+                    while (true)
+                    {
+                        Message M = await ListenAsync();
+                        switch (M.Type)
+                        {
+                            case MessageType.KeyAcknowledgement:
+                                break;
+
+                            case MessageType.ValueResponse:
+                                break;
+
+                            case MessageType.JoinRequest:
+                                var N = M.Source;
+                                N.Index = NodeNetwork.Count;
+                                N.Status = NodeStatus.Node;
+                                N.CoordinatorAddress = Address;
+                                N.NodeNetwork?.Clear();   // Networks of other nodes are not stored.
+                                NodeNetwork.Add(N);
+                                await SendJoinResponse();
+                                await InitiateGossip(N);
+                                break;
+
+                            case MessageType.JoinIntroduction:
+                                break;
+
+                            case MessageType.Ping:
+                                break;
+
+                            // Coord should not receive these messages
+                            //case MessageType.KeyRequest:
+                            //case MessageType.KeyQuery:
+                            //case MessageType.JoinResponse:
+                            default:
+                                throw new Exception("Coordinator received invalid message " + M.Type.ToString() + " from " + M.Source);
+                        }
+                    }
+
+                case NodeStatus.Node:
+                    while (true)
+                    {
+                        Message M = await ListenAsync();
+                        switch (M.Type)
+                        {
+                            case MessageType.KeyRequest:
+                                break;
+
+                            case MessageType.KeyQuery:
+                                break;
+
+                            case MessageType.Ping:
+                                break;
+
+                            case MessageType.JoinResponse:
+                                break;
+                            case MessageType.JoinIntroduction:
+                                break;
+
+                            case MessageType.ValueResponse:
+                                break;
+                            case MessageType.JoinRequest:
+                                break;
+                            case MessageType.KeyAcknowledgement:
+                                break;
+                        }
+
+                    }
+
             }
+        }
+
+        internal Task InitiateGossip(Node newNode)
+        {
+            // Send a random node the information of the new node.
+            int RandomNodeIndex;
+            do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(NodeNetwork.Count);
+            while (RandomNodeIndex == NodeNetwork.Count - 1);       // If the random generated node is new node, generate a different index.
+
+            return SendIntroduction(RandomNodeIndex);
         }
     }
 }
