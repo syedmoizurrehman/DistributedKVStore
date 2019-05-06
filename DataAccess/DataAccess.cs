@@ -26,8 +26,8 @@ namespace DataAccess
             Database = new SQLiteAsyncConnection(FilePath);
             if (File.Exists(FilePath))
             {
-                var SyncDb = new SQLiteConnection(FilePath, SQLiteOpenFlags.ReadWrite);
-                SyncDb.CreateTable<KVTable>();
+                Database = new SQLiteAsyncConnection(FilePath, SQLiteOpenFlags.ReadWrite);
+                //SyncDb.CreateTable<KVTable>();
             }
             else
             {
