@@ -162,7 +162,8 @@ namespace ApplicationLayer
         /// <returns></returns>
         public Task SendIntroduction(int nodeIndex)
         {
-            return SendAsync(nodeIndex, Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork, NodeNetwork.Count - 1));
+            return SendAsync(nodeIndex, 
+                Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork, NodeNetwork.Count - 1, NodeNetwork.Count / 4));
         }
 
         public Task Ping(int targetNodeIndex)
