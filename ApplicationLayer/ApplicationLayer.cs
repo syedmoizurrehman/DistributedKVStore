@@ -86,7 +86,6 @@ namespace ApplicationLayer
                 {
                     case NodeStatus.Coordinator:
                         Index = 0;
-                        var Z = await DataAccess.SqliteDatabase.GetValueAsync("1");
                         // Add coordinator to network list.
                         NodeNetwork.Add(Index, this);
                         // Start Listening for client's request.

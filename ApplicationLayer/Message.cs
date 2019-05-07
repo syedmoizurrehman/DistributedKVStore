@@ -86,6 +86,8 @@ namespace ApplicationLayer
 
         public string FailureMessage { get; private set; }
 
+        public int GossipCount { get; private set; }
+
         public DateTimeOffset KeyTimestamp { get; private set; }
 
         /// <summary>
@@ -113,9 +115,10 @@ namespace ApplicationLayer
         /// <param name="source"></param>
         /// <param name="destination"></param>
         /// <param name="nodeNetwork"></param>
+        /// <param name="gossipCount">The number of times this message will be disseminated throughout the network.</param>
         /// <param name="newNodeIndex">The index of new node in the node network array.</param>
         /// <returns></returns>
-        public static Message ConstructJoinIntroduction(Node source, Node destination, Dictionary<int, Node> nodeNetwork, int newNodeIndex)
+        public static Message ConstructJoinIntroduction(Node source, Node destination, Dictionary<int, Node> nodeNetwork, int newNodeIndex, int gossipCount)
         {
             var Msg = new Message
             {
@@ -123,6 +126,7 @@ namespace ApplicationLayer
                 Source = source,
                 Destination = destination,
                 Network = nodeNetwork,
+                GossipCount = gossipCount,
             };
             Msg.NewNode = Msg.Network[newNodeIndex];
             return Msg;
@@ -202,7 +206,7 @@ namespace ApplicationLayer
             Obj.Append("SOURCE:").AppendLine(Source.Address.ToString());
             Obj.Append("DESTINATION:").AppendLine(Destination.Address.ToString());
             Obj.Append("TYPE:").AppendLine(Type.ToString());
-            Obj.Append("NODE-ID:").AppendLine(Source.Index.ToString());     // ID of Source node.
+            Obj.Append("SOURCE-ID:").AppendLine(Source.Index.ToString());     // ID of Source node.
             Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? Network.Count.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared.
             if (shareNetwork)
             {
@@ -245,6 +249,7 @@ namespace ApplicationLayer
 
                 case MessageType.JoinIntroduction:
                     Obj.Append("NEW-ID:").AppendLine(NewNode.Index.ToString());         // The id indicating the index of new node in network array. This will be used to get info. of new node from network sent with this message.
+                    Obj.Append("GOSSIP-COUNT:").AppendLine(GossipCount.ToString());     // This count will be decremented every time the message is received and sent to another node until the count reaches 0, at which point the gossip will stop.
                     break;
 
                 case MessageType.WriteRequest:
@@ -340,7 +345,10 @@ namespace ApplicationLayer
                                     NewMessage.NewNode = new Node { Index = Convert.ToInt32(Line) }; break;
 
                                 case MessageType.JoinIntroduction:
-                                    NewMessage.NewNode = new Node { Index = Convert.ToInt32(Line) }; break;
+                                    NewMessage.NewNode = new Node { Index = Convert.ToInt32(Line) };
+                                    Line = Reader.ReadLine().Split(':')[1].Trim();
+                                    NewMessage.GossipCount = Convert.ToInt32(Line) - 1;     // Decrement the Gossip count to indicate the successful receipt of gossip.
+                                    break;
 
                                 case MessageType.WriteRequest:
                                     NewMessage.Key = Line; break;
