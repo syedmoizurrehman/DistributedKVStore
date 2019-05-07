@@ -23,8 +23,6 @@ namespace ApplicationLayer
     /// </summary>
     public class Node
     {
-        private readonly Action Initiated;
-
         /// <summary>
         /// Gets the id which uniquely identifies this node on the network.
         /// </summary>
@@ -54,6 +52,11 @@ namespace ApplicationLayer
 
         public IPAddress CoordinatorAddress { get; set; }
 
+        /// <summary>
+        /// Gets or sets the number of nodes a gossip will be disseminated to before termination.
+        /// </summary>
+        public static int GossipCount { get; internal set; }
+
         private static int HashFunction(string key) => key.GetHashCode() % AppProperties.RingSize;
 
         internal Node()
@@ -64,24 +67,25 @@ namespace ApplicationLayer
         public Node(IPAddress coordAddress, bool isHost = false, bool isClient = false)
         {
             NodeNetwork = new Dictionary<int, Node>();
-            //Initiated = new Action(Initialize);
 
             Index = -1;                             // -1 indicated unassigned ID.
             IsHost = isHost;
             CoordinatorAddress = coordAddress;
             Status = NodeStatus.Node;
+            GossipCount = AppProperties.RingSize / 4;
             PollDelay = 500;
-            //Initiated();
+            if (IsHost)
+            {
+                Address = Network.GetHostIPAddress();
+                if (Address.Equals(CoordinatorAddress))
+                    Status = NodeStatus.Coordinator;
+            }
         }
 
         public async Task Initialize()
         {
             if (IsHost)
             {
-                Address = Network.GetHostIPAddress();
-                if (Address.Equals(CoordinatorAddress))
-                    Status = NodeStatus.Coordinator;
-
                 switch (Status)
                 {
                     case NodeStatus.Coordinator:
@@ -157,13 +161,13 @@ namespace ApplicationLayer
         }
 
         /// <summary>
-        /// Introduces the most recently added node.
+        /// Introduces the specified node to the network.
         /// </summary>
         /// <returns></returns>
         public Task SendIntroduction(int nodeIndex)
         {
-            return SendAsync(nodeIndex, 
-                Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork, NodeNetwork.Count - 1, NodeNetwork.Count / 4));
+            return SendAsync(nodeIndex,
+                Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork, NodeNetwork.Count - 1, GossipCount));
         }
 
         public Task Ping(int targetNodeIndex)
@@ -247,7 +251,14 @@ namespace ApplicationLayer
 
                             case MessageType.JoinResponse:
                                 break;
+
                             case MessageType.JoinIntroduction:
+                                if (NodeNetwork.ContainsKey(M.NewNode.Index))
+                                    NodeNetwork[M.NewNode.Index] = M.NewNode;
+                                else
+                                    NodeNetwork.Add(M.NewNode.Index, M.NewNode);
+                                if (M.GossipCount > 0)
+                                    await SendIntroduction(NodeNetwork.Count - 1);
                                 break;
 
                             case MessageType.ValueResponse:

@@ -21,22 +21,22 @@ namespace Coordinator
 
         static async Task<int> Main(string[] args)
         {
-            string CoordinatorAddress = args[0].Remove(0, 1);       // Remove '-' from the argument.
-
             try
             {
+                string CoordinatorAddress = args[0].Remove(0, 1);       // Remove '-' from the argument.
                 This = new Node(IPAddress.Parse(CoordinatorAddress), true);
                 string Input = string.Empty;
                 switch (This.Status)
                 {
                     case NodeStatus.Node:
-                        Console.WriteLine("Initializing this node...");
+                        Console.WriteLine("Mode: Application Node");
                         Console.WriteLine("Connecting to Coordinator...");
                         await This.Initialize();
                         break;
 
                     case NodeStatus.Coordinator:
-                        Console.WriteLine("Coordinator detected. Listening for requests...");
+                        Console.WriteLine("Mode: Coordinator");
+                        Console.WriteLine("Listening for requests...");
                         await This.Initialize();
                         break;
 
