@@ -26,21 +26,25 @@ namespace Coordinator
             try
             {
                 This = new Node(IPAddress.Parse(CoordinatorAddress), true);
-                await This.Initialize();
                 string Input = string.Empty;
                 switch (This.Status)
                 {
                     case NodeStatus.Node:
                         Console.WriteLine("Initializing this node...");
                         Console.WriteLine("Connecting to Coordinator...");
-                        await This.SendJoinRequest();
+                        await This.Initialize();
                         break;
 
                     case NodeStatus.Coordinator:
-                        Console.WriteLine("Coordinator detected. Listening for client's requests...");
-                        Console.WriteLine("Switching to debug mode: Accepting client input from console.");
+                        Console.WriteLine("Coordinator detected. Listening for requests...");
+                        await This.Initialize();
+                        break;
+
+                    case NodeStatus.Client:
+                        await This.Initialize();
                         while (true)
                         {
+                            Console.WriteLine("Database Client");
                             Console.WriteLine("R: Request Read\tW: Request Write\tE: Exit");
                             Input = Console.ReadLine();
                             switch (Input)
@@ -56,7 +60,7 @@ namespace Coordinator
                                     var Key = Console.ReadLine();
                                     Console.Write("Enter value to be written to database corresponding to entered key:");
                                     Input = Console.ReadLine();
-                                    This.Write(Key, Input);
+                                    await This.Write(Key, Input);
                                     break;
 
                                 case "E":
@@ -64,27 +68,6 @@ namespace Coordinator
                             }
                         }
                         break;
-                    
-                    //case NodeStatus.Client:
-                        //break;
-                }
-
-                while (true)
-                {
-                    //Console.WriteLine("S: Send Message.");
-                    //Input = Console.ReadLine();
-                    //switch (Input)
-                    //{
-                    //    case "S":
-                    //        Console.Write("Enter message to send:");
-                    //        Input = Console.ReadLine();
-                    //        Console.WriteLine("Sending Message...");
-                    //        This.SendAsync()
-                    //        break;
-
-                    //}
-                    //Node Client = new Node(Network, false);
-                    //await Task.Run(() => Client.Send(This, "Sent from client."));
                 }
             }
             catch (Exception E)
