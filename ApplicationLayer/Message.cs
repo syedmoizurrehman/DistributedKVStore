@@ -304,7 +304,7 @@ namespace ApplicationLayer
                             else
                                 break;
 
-                            for (int i = 0; i < NewMessage.Network.Count; i++)
+                            for (int i = 0; i < Count; i++)
                             {
                                 var N = new Node();
                                 Line = Reader.ReadLine().Split(':')[1].Trim();
