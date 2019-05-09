@@ -153,6 +153,27 @@ namespace ApplicationLayer
         }
 
         /// <summary>
+        /// Sent from coordinator to the selected node for retrieval of value of specified key.
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="destination"></param>
+        /// <param name="nodeNetwork"></param>
+        /// <param name="key"></param>
+        /// <returns></returns>
+        public static Message ConstructKeyQuery(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key)
+        {
+            return new Message
+            {
+                Type = MessageType.KeyQuery,
+                Source = source,
+                Destination = destination,
+                Network = nodeNetwork,
+                Key = key,
+            };
+        }
+
+
+        /// <summary>
         /// Ping.
         /// </summary>
         /// <param name="source"></param>
@@ -215,6 +236,7 @@ namespace ApplicationLayer
                     Obj.Append("ID:").AppendLine(Network[i].Index.ToString());
                     Obj.Append("STATUS:").AppendLine(Network[i].Status.ToString());
                     Obj.Append("ADDRESS:").AppendLine(Network[i].Address.ToString());
+                    Obj.Append("IS-DOWN:").AppendLine(Convert.ToInt32(Network[i].IsDown).ToString());
                 }
             }
 
@@ -313,9 +335,11 @@ namespace ApplicationLayer
                                 N.Status = (NodeStatus)Enum.Parse(typeof(NodeStatus), Line);
                                 Line = Reader.ReadLine().Split(':')[1].Trim();
                                 N.Address = IPAddress.Parse(Line);
+                                Line = Reader.ReadLine().Split(':')[1].Trim();
+                                N.IsDown = Line.Equals("1");
                                 NewMessage.Network[i] = N;
                             }
-                            LineNo += NewMessage.Network.Count * 3;
+                            LineNo += NewMessage.Network.Count * 4;
                             break;
 
                         default:

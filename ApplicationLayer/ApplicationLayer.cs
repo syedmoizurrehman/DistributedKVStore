@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using AppUtilities;
@@ -50,6 +51,8 @@ namespace ApplicationLayer
         /// </summary>
         public bool IsHost { get; internal set; }
 
+        public bool IsDown { get; set; }
+
         public IPAddress CoordinatorAddress { get; set; }
 
         /// <summary>
@@ -57,11 +60,28 @@ namespace ApplicationLayer
         /// </summary>
         public static int GossipCount { get; internal set; }
 
-        private static int HashFunction(string key) => key.GetHashCode() % AppProperties.RingSize;
+        private static List<int> GetHash(string key)
+        {
+            HashAlgorithm HashAlgo = HashAlgorithm.Create();
+            HashAlgo.ComputeHash(Encoding.UTF8.GetBytes(key));
+            var Indices = new List<int>();
+            for (int i = 0; i < AppProperties.ReplicationFactor; i++)
+            {
+                int Index = Math.Abs(BitConverter.ToInt32(HashAlgo.Hash, i % HashAlgo.HashSize) % AppProperties.RingSize);
+                while (Indices.Contains(Index))
+                {
+                    Index++;
+                    Index %= AppProperties.RingSize;
+                }
+                Indices.Add(Index);
+            }
+            return Indices;
+        }
 
         internal Node()
         {
             IsHost = false;
+            IsDown = false;
         }
 
         public Node(IPAddress coordAddress, bool isHost = false, bool isClient = false)
@@ -70,6 +90,7 @@ namespace ApplicationLayer
 
             Index = -1;                             // -1 indicated unassigned ID.
             IsHost = isHost;
+            IsDown = false;
             CoordinatorAddress = coordAddress;
             Status = NodeStatus.Node;
             GossipCount = AppProperties.RingSize / 4;
@@ -136,14 +157,48 @@ namespace ApplicationLayer
             throw new NotImplementedException();
         }
 
-        public void Read(string key)
+        public async Task<string> Read(string key)
         {
-            for (int i = 0; i < AppProperties.RingSize; i++)
+            switch (Status)
             {
-                int ReplicaNodeIndex = HashFunction(key);
-                var M = Message.ConstructKeyRequest(this, NodeNetwork[i], NodeNetwork, key);
-                SendAsync(ReplicaNodeIndex, M);
+                case NodeStatus.Node:
+                    break;
+
+                case NodeStatus.Coordinator:
+                    List<int> ReplicaIndices = GetHash(key);
+                    List<Message> Responses = new List<Message>();
+                    DateTimeOffset MaxTimeStamp = DateTimeOffset.MinValue;
+                    int LatestIndex = -1;
+                    for (int i = 0; i < AppProperties.RingSize; i++)
+                    {
+                        await SendKeyRequest(ReplicaIndices[i], key);
+                        Message Response;
+                        do Response = await ListenAsync();
+                        while (Response.Type != MessageType.KeyAcknowledgement && !ReplicaIndices.Contains(Response.Source.Index));
+
+                        Responses.Add(Response);
+                        if (Response.KeyTimestamp > MaxTimeStamp)
+                        {
+                            MaxTimeStamp = Response.KeyTimestamp;
+                            LatestIndex = i;
+                        }
+                    }
+                    await SendKeyQuery(Responses[LatestIndex].Source.Index, key);
+                    Message ValueResponse;
+                    do ValueResponse = await ListenAsync();
+                    while (ValueResponse.Type != MessageType.ValueResponse && !ReplicaIndices.Contains(ValueResponse.Source.Index));
+                    return ValueResponse.Value;
+
+                case NodeStatus.Client:
+                    break;
             }
+            return null;
+        }
+
+        private Task SendKeyQuery(int nodeIndex, string key)
+        {
+            var M = Message.ConstructKeyRequest(this, NodeNetwork[nodeIndex], NodeNetwork, key);
+            return SendAsync(nodeIndex, M);
         }
 
         public Task SendJoinRequest()
@@ -173,6 +228,12 @@ namespace ApplicationLayer
         public Task Ping(int targetNodeIndex)
         {
             return SendAsync(targetNodeIndex, Message.ConstructPing(this, NodeNetwork[targetNodeIndex], NodeNetwork));
+        }
+
+        public Task SendKeyRequest(int nodeIndex, string key)
+        {
+            var M = Message.ConstructKeyRequest(this, NodeNetwork[nodeIndex], NodeNetwork, key);
+            return SendAsync(nodeIndex, M);
         }
 
         public Task SendAsync(int nodeIndex, Message message)
