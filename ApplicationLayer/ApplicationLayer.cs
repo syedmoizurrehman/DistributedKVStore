@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using AppUtilities;
+using DataAccess;
 using NetworkLayer;
 
 using AppProperties = AppUtilities.Properties;
@@ -149,12 +150,12 @@ namespace ApplicationLayer
             throw new NotImplementedException();
         }
 
-        public async Task<string> Read(string key)
+        public async Task<KVTable> Read(string key)
         {
             switch (Status)
             {
                 case NodeStatus.Node:
-                    break;
+                    return await SqliteDatabase.GetValueAsync(key);
 
                 case NodeStatus.Coordinator:
                     List<int> ReplicaIndices = GetHash(key);
@@ -166,7 +167,9 @@ namespace ApplicationLayer
                         await SendKeyRequest(ReplicaIndices[i], key);
                         Message Response;
                         do Response = await ListenAsync();
-                        while (Response.Type != MessageType.KeyAcknowledgement && !ReplicaIndices.Contains(Response.Source.Index));
+                        while (Response.Type != MessageType.KeyAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
+                        if (string.IsNullOrEmpty(Response.Key))
+                            continue;
 
                         Responses.Add(Response);
                         if (Response.KeyTimestamp > MaxTimeStamp)
@@ -175,11 +178,14 @@ namespace ApplicationLayer
                             LatestIndex = i;
                         }
                     }
+                    if (LatestIndex == -1)
+                        return null;        // Key was not found on any replica.
+
                     await SendKeyQuery(Responses[LatestIndex].Source.Index, key);
                     Message ValueResponse;
                     do ValueResponse = await ListenAsync();
                     while (ValueResponse.Type != MessageType.ValueResponse && !ReplicaIndices.Contains(ValueResponse.Source.Index));
-                    return ValueResponse.Value;
+                    return new KVTable { Key = key, Value = ValueResponse.Value, TimeStamp = ValueResponse.KeyTimestamp };
 
                 case NodeStatus.Client:
                     break;
@@ -228,6 +234,19 @@ namespace ApplicationLayer
             return SendAsync(nodeIndex, M);
         }
 
+        public Task SendKeyAcknowledgment(int nodeIndex, string key, DateTimeOffset keyTimestamp)
+        {
+            var M = Message.ConstructKeyAcknowledgment(this, NodeNetwork[nodeIndex], NodeNetwork, key, keyTimestamp);
+            return SendAsync(nodeIndex, M);
+        }
+
+        public Task SendValueResponse(int nodeIndex, string key, string value)
+        {
+            var M = Message.ConstructValueResponse(this, NodeNetwork[nodeIndex], NodeNetwork, key, value);
+            return SendAsync(nodeIndex, M);
+        }
+
+
         public Task SendAsync(int nodeIndex, Message message)
         {
             return Network.SendAsync(NodeNetwork[nodeIndex].Address, AppProperties.PortNumber, Encoding.ASCII.GetBytes(message.Serialize()));
@@ -252,13 +271,8 @@ namespace ApplicationLayer
                         Message M = await ListenAsync();
                         switch (M.Type)
                         {
-                            case MessageType.KeyAcknowledgement:
-                                break;
-
-                            case MessageType.ValueResponse:
-                                break;
-
                             case MessageType.JoinRequest:
+                                Console.WriteLine("Received join request. Sending back the ID to be assigned.");
                                 var N = M.Source;
                                 N.Index = NodeNetwork.Count;
                                 N.Status = NodeStatus.Node;
@@ -268,7 +282,7 @@ namespace ApplicationLayer
                                     NodeNetwork[N.Index] = N;
                                 else
                                     NodeNetwork.Add(N.Index, N);
-                                await SendJoinResponse();
+                                await SendJoinResponse(); Console.WriteLine("Initiating Gossip protocol.");
                                 await InitiateGossip(N);
                                 break;
 
@@ -278,6 +292,11 @@ namespace ApplicationLayer
                             case MessageType.Ping:
                                 break;
 
+                            // Coord receives these messages only in specific methods.
+                            //case MessageType.KeyAcknowledgement:
+                            //case MessageType.ValueResponse:
+                                //break;
+                            
                             // Coord should not receive these messages
                             //case MessageType.KeyRequest:
                             //case MessageType.KeyQuery:
@@ -294,9 +313,19 @@ namespace ApplicationLayer
                         switch (M.Type)
                         {
                             case MessageType.KeyRequest:
+                                Console.WriteLine("Received Key request from coordinator.");
+                                var X = await Read(M.Key);
+                                if (X != null)  // if Key exists in local storage.
+                                { await SendKeyAcknowledgment(0, X.Key, X.TimeStamp); Console.WriteLine("Key found. Sending key ACK."); }
+                                else
+                                { await SendKeyAcknowledgment(0, null, DateTimeOffset.MinValue); Console.WriteLine("Key not found. Notifying coordinator about absense of key."); }
+
                                 break;
 
                             case MessageType.KeyQuery:
+                                Console.WriteLine("Received Key query from coordinator. Sending back the value requested.");
+                                var Z = await Read(M.Key);
+                                await SendValueResponse(0, Z.Key, Z.Value);
                                 break;
 
                             case MessageType.Ping:
@@ -306,6 +335,7 @@ namespace ApplicationLayer
                                 break;
 
                             case MessageType.JoinIntroduction:
+                                Console.WriteLine("Received introduction of a new node. Initiating Gossip protocol.");
                                 UpdateNodeNetwork(M.NewNode);
                                 if (M.GossipCount > 0)
                                     await SendIntroduction(NodeNetwork.Count - 1);

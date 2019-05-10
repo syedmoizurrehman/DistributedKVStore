@@ -172,6 +172,31 @@ namespace ApplicationLayer
             };
         }
 
+        public static Message ConstructKeyAcknowledgment(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key, DateTimeOffset keyTimestamp)
+        {
+            return new Message
+            {
+                Type = MessageType.KeyAcknowledgement,
+                Source = source,
+                Destination = destination,
+                Network = nodeNetwork,
+                Key = key,
+                KeyTimestamp = keyTimestamp
+            };
+        }
+
+        internal static object ConstructValueResponse(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key, string value)
+        {
+            return new Message
+            {
+                Type = MessageType.ValueResponse,
+                Source = source,
+                Destination = destination,
+                Network = nodeNetwork,
+                Key = key,
+                Value = value
+            };
+        }
 
         /// <summary>
         /// Ping.
