@@ -185,7 +185,7 @@ namespace ApplicationLayer
             };
         }
 
-        internal static object ConstructValueResponse(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key, string value)
+        internal static Message ConstructValueResponse(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key, string value)
         {
             return new Message
             {
