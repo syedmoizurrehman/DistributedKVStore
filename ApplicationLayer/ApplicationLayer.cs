@@ -111,10 +111,8 @@ namespace ApplicationLayer
                 {
                     case NodeStatus.Coordinator:
                         Index = 0;
-                        // Add coordinator to network list.
+                        // Add coordinator (self) to network list.
                         NodeNetwork.Add(Index, this);
-                        // Start Listening for client's request.
-                        //await Network.ListenAsync(AppProperties.PortNumber);      // Debugging: Client's request will be received from console.
                         break;
 
                     case NodeStatus.Node:   // Only knows Coord's IP, nothing about the node network at this point.
@@ -123,16 +121,10 @@ namespace ApplicationLayer
                         await SendJoinRequest();
                         Message M;
                         do M = await ListenAsync();
-                        while (M.Type != MessageType.JoinResponse);
+                        while (M.Type != MessageType.JoinResponse && M.Source.Address != CoordinatorAddress);
 
                         Index = M.NewNode.Index;
-                        for (int i = 0; i < M.Network.Count; i++)
-                        {
-                            if (NodeNetwork.ContainsKey(M.Network[i].Index))
-                                NodeNetwork[M.Network[i].Index] = M.Network[i];
-                            else
-                                NodeNetwork.Add(M.Network[i].Index, M.Network[i]);
-                        }
+                        UpdateNodeNetwork(M.Network);
                         break;
                 }
                 await Poll();
@@ -314,10 +306,7 @@ namespace ApplicationLayer
                                 break;
 
                             case MessageType.JoinIntroduction:
-                                if (NodeNetwork.ContainsKey(M.NewNode.Index))
-                                    NodeNetwork[M.NewNode.Index] = M.NewNode;
-                                else
-                                    NodeNetwork.Add(M.NewNode.Index, M.NewNode);
+                                UpdateNodeNetwork(M.NewNode);
                                 if (M.GossipCount > 0)
                                     await SendIntroduction(NodeNetwork.Count - 1);
                                 break;
@@ -342,10 +331,29 @@ namespace ApplicationLayer
 
             // Send a random node the information of the new node.
             int RandomNodeIndex;
-            do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(NodeNetwork.Count);
+            do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(0, AppProperties.RingSize);
             while (RandomNodeIndex == NodeNetwork.Count - 1);       // If the random generated node is new node, generate a different index.
 
             return SendIntroduction(RandomNodeIndex);
+        }
+
+        private void UpdateNodeNetwork(Dictionary<int, Node> nodeNetwork)
+        {
+            for (int i = 0; i < nodeNetwork.Count; i++)
+            {
+                if (NodeNetwork.ContainsKey(nodeNetwork[i].Index))
+                    NodeNetwork[nodeNetwork[i].Index] = nodeNetwork[i];
+                else
+                    NodeNetwork.Add(nodeNetwork[i].Index, nodeNetwork[i]);
+            }
+        }
+
+        private void UpdateNodeNetwork(Node newNode)
+        {
+            if (NodeNetwork.ContainsKey(newNode.Index))
+                NodeNetwork[newNode.Index] = newNode;
+            else
+                NodeNetwork.Add(newNode.Index, newNode);
         }
     }
 }
