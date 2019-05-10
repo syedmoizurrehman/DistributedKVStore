@@ -94,7 +94,10 @@ namespace ApplicationLayer
             IsHost = isHost;
             IsDown = false;
             CoordinatorAddress = coordAddress;
-            Status = NodeStatus.Node;
+            if (isClient)
+                Status = NodeStatus.Client;
+            else
+                Status = NodeStatus.Node;
             GossipCount = AppProperties.RingSize / 4;
             PollDelay = 500;
             if (IsHost)
@@ -158,9 +161,30 @@ namespace ApplicationLayer
             }
         }
 
-        public Task Write(string key, string value)
+        public async Task Write(string key, string value)
         {
-            throw new NotImplementedException();
+            switch (Status)
+            {
+                case NodeStatus.Node:
+                    break;
+                case NodeStatus.Coordinator:
+                    List<int> ReplicaIndices = GetHash(key);
+                    List<Message> Responses = new List<Message>();
+                    for (int i = 0; i < AppProperties.RingSize; i++)
+                    {
+                        Message Response;
+                        await SendWriteRequest(ReplicaIndices[i], key, value);
+                        do Response = await ListenAsync();
+                        while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
+
+                        Responses.Add(Response);
+                    }
+                    // notify client about write
+                    // await sendclientwriteack
+                    break;
+                case NodeStatus.Client:
+                    break;
+            }
         }
 
         public async Task<KVTable> Read(string key)
@@ -210,6 +234,12 @@ namespace ApplicationLayer
                     return new KVTable { Key = CoordResponse.Key, Value = CoordResponse.Value, TimeStamp = CoordResponse.KeyTimestamp };
             }
             return null;
+        }
+
+        private Task SendWriteRequest(int nodeIndex, string key, string value)
+        {
+            var M = Message.ConstructWriteRequest(this, NodeNetwork[nodeIndex], key, value);
+            return SendAsync(nodeIndex, M);
         }
 
         private Task SendClientReadRequest(string key)

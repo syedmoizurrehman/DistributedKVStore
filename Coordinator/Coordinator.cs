@@ -24,7 +24,11 @@ namespace Coordinator
             try
             {
                 string CoordinatorAddress = args[0].Remove(0, 1);       // Remove '-' from the argument.
-                This = new Node(IPAddress.Parse(CoordinatorAddress), true);
+                bool IsClient = false;
+                if (args.Length >= 2 && args[1].Equals("-client"))
+                    IsClient = true;
+
+                This = new Node(IPAddress.Parse(CoordinatorAddress), true, IsClient);
                 string Input = string.Empty;
                 switch (This.Status)
                 {
