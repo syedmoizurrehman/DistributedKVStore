@@ -69,7 +69,7 @@ namespace ApplicationLayer
             for (int i = 0; i < AppProperties.ReplicationFactor; i++)
             {
                 int Index = Math.Abs(BitConverter.ToInt32(HashAlgo.Hash, i % HashAlgo.HashSize) % AppProperties.RingSize);
-                while (Indices.Contains(Index))
+                while (Indices.Contains(Index) || Index == 0)
                 {
                     Index++;
                     Index %= AppProperties.RingSize;
@@ -162,7 +162,7 @@ namespace ApplicationLayer
                     List<Message> Responses = new List<Message>();
                     DateTimeOffset MaxTimeStamp = DateTimeOffset.MinValue;
                     int LatestIndex = -1;
-                    for (int i = 0; i < AppProperties.RingSize; i++)
+                    for (int i = 0; i < 1/*AppProperties.RingSize*/; i++)
                     {
                         await SendKeyRequest(ReplicaIndices[i], key);
                         Message Response;
@@ -195,7 +195,7 @@ namespace ApplicationLayer
 
         private Task SendKeyQuery(int nodeIndex, string key)
         {
-            var M = Message.ConstructKeyRequest(this, NodeNetwork[nodeIndex], NodeNetwork, key);
+            var M = Message.ConstructKeyQuery(this, NodeNetwork[nodeIndex], NodeNetwork, key);
             return SendAsync(nodeIndex, M);
         }
 
@@ -284,6 +284,7 @@ namespace ApplicationLayer
                                     NodeNetwork.Add(N.Index, N);
                                 await SendJoinResponse(); Console.WriteLine("Initiating Gossip protocol.");
                                 await InitiateGossip(N);
+                                KVTable X = await Read("A");
                                 break;
 
                             case MessageType.JoinIntroduction:

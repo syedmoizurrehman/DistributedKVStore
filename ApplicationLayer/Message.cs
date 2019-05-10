@@ -281,7 +281,9 @@ namespace ApplicationLayer
                     break;
 
                 case MessageType.ValueResponse:
+                    Obj.Append("KEY: ").AppendLine(Key);
                     Obj.Append("VALUE: ").AppendLine(Value);
+                    Obj.Append("TIMESTAMP: ").AppendLine(KeyTimestamp.ToUnixTimeSeconds().ToString());
                     break;
 
                 case MessageType.Ping:
@@ -375,6 +377,7 @@ namespace ApplicationLayer
 
                                 case MessageType.KeyAcknowledgement:
                                     NewMessage.Key = Line;
+                                    Line = Reader.ReadLine().Split(':')[1].Trim();
                                     NewMessage.KeyTimestamp = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Line));
                                     break;
 
@@ -382,7 +385,12 @@ namespace ApplicationLayer
                                     NewMessage.Key = Line; break;
 
                                 case MessageType.ValueResponse:
-                                    NewMessage.Value = Line; break;
+                                    NewMessage.Key = Line;
+                                    Line = Reader.ReadLine().Split(':')[1].Trim();
+                                    NewMessage.Value = Line;
+                                    Line = Reader.ReadLine().Split(':')[1].Trim();
+                                    NewMessage.KeyTimestamp = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Line));
+                                    break;
 
                                 case MessageType.Ping:
                                     break;
