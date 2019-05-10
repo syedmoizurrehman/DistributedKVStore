@@ -52,7 +52,15 @@ namespace Coordinator
                                 case "R":
                                     Console.Write("Enter key to be read from database:");
                                     Input = Console.ReadLine();
-                                    This.Read(Input);
+                                    var Result = await This.Read(Input);
+                                    if (Result != null)
+                                    {
+                                        Console.WriteLine("Key: " + Result.Key);
+                                        Console.WriteLine("Value: " + Result.Value);
+                                        Console.WriteLine("Time stamp: " + Result.TimeStamp);
+                                    }
+                                    else
+                                        Console.WriteLine("Key was not found.");
                                     break;
 
                                 case "W":
