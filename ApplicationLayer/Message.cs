@@ -9,6 +9,26 @@ namespace ApplicationLayer
     public enum MessageType
     {
         /// <summary>
+        /// Message from client to coordinator requesting a database read.
+        /// </summary>
+        ClientReadRequest,
+
+        /// <summary>
+        /// Message from client to coordinator requesting a database write.
+        /// </summary>
+        ClientWriteRequest,
+
+        /// <summary>
+        /// Response from coordinator to client containing the key-value pair and timestamp.
+        /// </summary>
+        ClientReadResponse,
+
+        /// <summary>
+        /// Response from coordinator to client indicating whether the write was successful.
+        /// </summary>
+        ClientWriteResponse,
+
+        /// <summary>
         /// Message sent from Coordinator to key replicas.
         /// </summary>
         KeyRequest,
@@ -89,6 +109,41 @@ namespace ApplicationLayer
         public int GossipCount { get; private set; }
 
         public DateTimeOffset KeyTimestamp { get; private set; }
+
+        public static Message ConstructClientReadRequest(Node client, Node coordinator, string key)
+        {
+            return new Message
+            {
+                Type = MessageType.ClientReadRequest,
+                Source = client,
+                Destination = coordinator,
+                Key = key,
+            };
+        }
+
+        public static Message ConstructFailureMessage(Node coordinator, Node client, string message)
+        {
+            return new Message
+            {
+                Type = MessageType.FailureIndication,
+                Source = coordinator,
+                Destination = client,
+                FailureMessage = message
+            };
+        }
+
+        public static Message ConstructClientReadResponse(Node coordinator, Node client, string key, string value, DateTimeOffset timestamp)
+        {
+            return new Message
+            {
+                Type = MessageType.ClientReadResponse,
+                Source = coordinator,
+                Destination = client,
+                Key = key,
+                Value = value,
+                KeyTimestamp = timestamp
+            };
+        }
 
         /// <summary>
         /// Request sent by a new node to coordinator to be introduced to the network.
@@ -276,10 +331,12 @@ namespace ApplicationLayer
                     Obj.Append("TIMESTAMP: ").AppendLine(KeyTimestamp.ToUnixTimeSeconds().ToString());
                     break;
 
+                case MessageType.ClientReadRequest:
                 case MessageType.KeyQuery:
                     Obj.Append("KEY: ").AppendLine(Key);
                     break;
 
+                case MessageType.ClientReadResponse:
                 case MessageType.ValueResponse:
                     Obj.Append("KEY: ").AppendLine(Key);
                     Obj.Append("VALUE: ").AppendLine(Value);

@@ -83,6 +83,7 @@ namespace ApplicationLayer
         {
             IsHost = false;
             IsDown = false;
+            Index = -1;
         }
 
         public Node(IPAddress coordAddress, bool isHost = false, bool isClient = false)
@@ -127,6 +128,17 @@ namespace ApplicationLayer
                         Index = M.NewNode.Index;
                         UpdateNodeNetwork(M.Network);
                         break;
+
+                    case NodeStatus.Client:
+                        Index = -1;
+                        NodeNetwork.Add(0, new Node
+                        {
+                            Address = CoordinatorAddress,
+                            Status = NodeStatus.Coordinator,
+                            Index = 0,
+                            CoordinatorAddress = CoordinatorAddress
+                        });
+                        break;
                 }
                 await Poll();
             }
@@ -140,6 +152,7 @@ namespace ApplicationLayer
                         Index = 0;
                         break;
                     case NodeStatus.Client:
+                        Index = -1;
                         break;
                 }
             }
@@ -188,9 +201,35 @@ namespace ApplicationLayer
                     return new KVTable { Key = key, Value = ValueResponse.Value, TimeStamp = ValueResponse.KeyTimestamp };
 
                 case NodeStatus.Client:
-                    break;
+                    Console.WriteLine("Requesting Coordinator for the key...");
+                    await SendClientReadRequest(key);
+                    Message CoordResponse;
+                    do CoordResponse = await ListenAsync();
+                    while (CoordResponse.Type != MessageType.ClientReadResponse && CoordResponse.Source.Address != CoordinatorAddress);
+                    Console.WriteLine("");
+                    return new KVTable { Key = CoordResponse.Key, Value = CoordResponse.Value, TimeStamp = CoordResponse.KeyTimestamp };
             }
             return null;
+        }
+
+        private Task SendClientReadRequest(string key)
+        {
+            var M = Message.ConstructClientReadRequest(this, NodeNetwork[0], key);
+            return SendAsync(0, M);
+        }
+
+        private Task SendClientReadResponse(KVTable readResult)
+        {
+            Message M;
+            if (readResult == null)
+                M = Message.ConstructFailureMessage(this, NodeNetwork[-1], "Key does not exist.");
+
+            else
+                M = Message.ConstructClientReadResponse(
+                    this,
+                    NodeNetwork[-1],
+                    readResult.Key, readResult.Value, readResult.TimeStamp);
+            return SendAsync(-1, M);
         }
 
         private Task SendKeyQuery(int nodeIndex, string key)
@@ -271,6 +310,13 @@ namespace ApplicationLayer
                         Message M = await ListenAsync();
                         switch (M.Type)
                         {
+                            case MessageType.ClientReadRequest:
+                                var Client = M.Source;
+                                NodeNetwork.Add(-1, Client);
+                                KVTable X = await Read(M.Key);
+                                await SendClientReadResponse(X);
+                                break;
+
                             case MessageType.JoinRequest:
                                 Console.WriteLine("Received join request. Sending back the ID to be assigned.");
                                 var N = M.Source;
@@ -284,7 +330,6 @@ namespace ApplicationLayer
                                     NodeNetwork.Add(N.Index, N);
                                 await SendJoinResponse(); Console.WriteLine("Initiating Gossip protocol.");
                                 await InitiateGossip(N);
-                                KVTable X = await Read("A");
                                 break;
 
                             case MessageType.JoinIntroduction:
