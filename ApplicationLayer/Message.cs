@@ -90,6 +90,19 @@ namespace ApplicationLayer
 
         public DateTimeOffset KeyTimestamp { get; private set; }
 
+        public static Message ConstructWriteRequest(Node source, Node coordinator, string key, string value)
+        {
+            return new Message
+            {
+                Type = MessageType.WriteRequest,
+                Source = source,
+                Destination = coordinator,
+                Key =  key,
+                Value = value
+            };
+        }
+
+
         /// <summary>
         /// Request sent by a new node to coordinator to be introduced to the network.
         /// </summary>
