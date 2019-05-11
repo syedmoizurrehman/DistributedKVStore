@@ -402,9 +402,9 @@ namespace ApplicationLayer
             return SendAsync(nodeIndex, M);
         }
 
-        public Task SendValueResponse(int nodeIndex, string key, string value)
+        public Task SendValueResponse(int nodeIndex, KVTable record)
         {
-            var M = Message.ConstructValueResponse(this, NodeNetwork[nodeIndex], NodeNetwork, key, value);
+            var M = Message.ConstructValueResponse(this, NodeNetwork[nodeIndex], NodeNetwork, record.Key, record.Value, record.TimeStamp);
             return SendAsync(nodeIndex, M);
         }
 
@@ -512,7 +512,7 @@ namespace ApplicationLayer
                             case MessageType.KeyQuery:
                                 Console.WriteLine("Received Key query from coordinator. Sending back the value requested.");
                                 var Z = await Read(M.Key);
-                                await SendValueResponse(0, Z.Key, Z.Value);
+                                await SendValueResponse(0, Z);
                                 break;
 
                             case MessageType.Ping:

@@ -295,13 +295,14 @@ namespace ApplicationLayer
             };
         }
 
-        internal static Message ConstructValueResponse(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key, string value)
+        internal static Message ConstructValueResponse(Node source, Node destination, Dictionary<int, Node> nodeNetwork, string key, string value, DateTimeOffset timestamp)
         {
             return new Message
             {
                 Type = MessageType.ValueResponse,
                 Source = source,
                 Destination = destination,
+                KeyTimestamp = timestamp,
                 Network = nodeNetwork,
                 Key = key,
                 Value = value
