@@ -83,7 +83,7 @@ namespace ApplicationLayer
                 while (Indices.Contains(Index) || Index == 0)
                 {
                     Index++;
-                    Index %= ringSize;
+                    Index %= ringSize + 1;
                 }
                 Indices.Add(Index);
             }
@@ -352,7 +352,7 @@ namespace ApplicationLayer
 
         public Task SendWriteRequest(int nodeIndex, string key, string value)
         {
-            var M = Message.ConstructWriteRequest(this, NodeNetwork[nodeIndex], key, value);
+            var M = Message.ConstructWriteRequest(this, NodeNetwork[nodeIndex], key, value, NodeNetwork);
             return SendAsync(nodeIndex, M);
         }
 
