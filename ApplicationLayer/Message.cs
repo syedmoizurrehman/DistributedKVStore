@@ -169,12 +169,13 @@ namespace ApplicationLayer
             };
         }
 
-        public static Message ConstructWriteRequest(Node source, Node coordinator, string key, string value)
+        public static Message ConstructWriteRequest(Node source, Node coordinator, string key, string value, Dictionary<int, Node> nodeNetwork)
         {
             return new Message
             {
                 Type = MessageType.WriteRequest,
                 Source = source,
+                Network = nodeNetwork,
                 Destination = coordinator,
                 Key =  key,
                 Value = value
@@ -362,18 +363,22 @@ namespace ApplicationLayer
             Obj.Append("DESTINATION:").AppendLine(Destination.Address.ToString());
             Obj.Append("TYPE:").AppendLine(Type.ToString());
             Obj.Append("SOURCE-ID:").AppendLine(Source.Index.ToString());     // ID of Source node.
-            if (Source.Status == NodeStatus.Client || Type == MessageType.FailureIndication)
+            if (Source.Status == NodeStatus.Client || Type == MessageType.FailureIndication || Network == null)
                 shareNetwork = false;
 
-            Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? Network.Count.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared.
             if (shareNetwork)
             {
-                for (int i = 0; i < Network.Count; i++)
+                if (Network.ContainsKey(-1))    // Clear client's info.
+                    Network.Remove(-1);
+
+                Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? Network.Count.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared
+
+                foreach (int Key in Network.Keys)
                 {
-                    Obj.Append("ID:").AppendLine(Network[i].Index.ToString());
-                    Obj.Append("STATUS:").AppendLine(Network[i].Status.ToString());
-                    Obj.Append("ADDRESS:").AppendLine(Network[i].Address.ToString());
-                    Obj.Append("IS-DOWN:").AppendLine(Convert.ToInt32(Network[i].IsDown).ToString());
+                    Obj.Append("ID:").AppendLine(Network[Key].Index.ToString());
+                    Obj.Append("STATUS:").AppendLine(Network[Key].Status.ToString());
+                    Obj.Append("ADDRESS:").AppendLine(Network[Key].Address.ToString());
+                    Obj.Append("IS-DOWN:").AppendLine(Convert.ToInt32(Network[Key].IsDown).ToString());
                 }
             }
 
@@ -475,7 +480,7 @@ namespace ApplicationLayer
                                 N.Address = IPAddress.Parse(Line);
                                 Line = Reader.ReadLine().Split(':')[1].Trim();
                                 N.IsDown = Line.Equals("1");
-                                NewMessage.Network[i] = N;
+                                NewMessage.Network[N.Index] = N;
                             }
                             LineNo += NewMessage.Network.Count * 4;
                             break;
