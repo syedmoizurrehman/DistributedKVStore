@@ -415,6 +415,8 @@ namespace ApplicationLayer
                     Obj.Append("GOSSIP-COUNT:").AppendLine(GossipCount.ToString());     // This count will be decremented every time the message is received and sent to another node until the count reaches 0, at which point the gossip will stop.
                     break;
 
+                case MessageType.ClientWriteRequest:
+                case MessageType.ClientWriteResponse:
                 case MessageType.WriteRequest:
                     Obj.Append("KEY: ").AppendLine(Key);
                     Obj.Append("VALUE: ").AppendLine(Value);
@@ -521,8 +523,13 @@ namespace ApplicationLayer
                                     NewMessage.GossipCount = Convert.ToInt32(Line) - 1;     // Decrement the Gossip count to indicate the successful receipt of gossip.
                                     break;
 
+                                case MessageType.ClientWriteRequest:
+                                case MessageType.ClientWriteResponse:
                                 case MessageType.WriteRequest:
-                                    NewMessage.Key = Line; break;
+                                    NewMessage.Key = Line;
+                                    Line = Reader.ReadLine().Split(':')[1].Trim();
+                                    NewMessage.Value = Line;
+                                    break;
 
                                 case MessageType.WriteAcknowledgement:
                                     break;
