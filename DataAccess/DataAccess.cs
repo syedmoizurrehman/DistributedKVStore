@@ -68,7 +68,9 @@ namespace DataAccess
         public static async Task<CoordinatorLookupTable> GetLookupEntryAsync(string key)
         {
             var Query = await CoordinatorLookup.Table<CoordinatorLookupTable>().Where(v => v.Key.Equals(key)).ToListAsync();
-            return Query[0];
+            if (Query.Count > 0)
+                return Query[0];
+            else return null;
         }
 
         public static async Task UpdateLookupEntry(string key, int ringSize)
@@ -106,7 +108,10 @@ namespace DataAccess
         public static async Task<KVTable> GetValueAsync(string key)
         {
             var Query = await Database.Table<KVTable>().Where(v => v.Key.Equals(key)).ToListAsync();
-            return Query[0];
+            if (Query.Count > 0)
+                return Query[0];
+            else
+                return null;
         }
 
         public static async Task UpdateValue(string key, string value)
