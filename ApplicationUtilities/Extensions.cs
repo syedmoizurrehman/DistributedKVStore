@@ -17,12 +17,11 @@ namespace AppUtilities
         public static async Task<int> ReceiveAsync(this Socket handlerSocket, byte[] buffer, SocketFlags socketFlags = SocketFlags.None)
         {
             if (handlerSocket == null) throw new ArgumentNullException(nameof(handlerSocket));
-            int Size = buffer.Length;
             int BytesReceived = 0;
             var ReceiveTaskCompletion = new TaskCompletionSource<int>();
             do
             {
-                int ReceiveBufferSize = Math.Min(Size, handlerSocket.Available);
+                int ReceiveBufferSize = handlerSocket.Available;
                 BytesReceived += ReceiveBufferSize;
                 handlerSocket.BeginReceive(buffer, 0, ReceiveBufferSize, socketFlags, ReceiveCompletedResult =>
                 {
@@ -41,7 +40,7 @@ namespace AppUtilities
                 }, null);
                 await ReceiveTaskCompletion.Task;
 
-            } while (handlerSocket.Available > 0 && BytesReceived < Size);
+            } while (handlerSocket.Available > 0);
             return BytesReceived;
         }
 

@@ -30,7 +30,16 @@ namespace ApplicationLayer
         /// </summary>
         public int Index { get; internal set; }
 
-        public int RingSize => NodeNetwork.Count - 1;
+        public int RingSize
+        {
+            get
+            {
+                if (NodeNetwork.ContainsKey(-1))
+                    return NodeNetwork.Count - 2;
+                else
+                    return NodeNetwork.Count - 1;
+            }
+        }
 
         public NodeStatus Status { get; set; }
 
@@ -133,6 +142,7 @@ namespace ApplicationLayer
 
                         Index = M.NewNode.Index;
                         UpdateNodeNetwork(M.Network);
+                        await SqliteDatabase.InitializeDatabase();
                         break;
 
                     case NodeStatus.Client:
@@ -392,11 +402,21 @@ namespace ApplicationLayer
                         switch (M.Type)
                         {
                             case MessageType.ClientReadRequest:
-                                var Client = M.Source;
-                                NodeNetwork.Add(-1, Client);
-                                KVTable X = await Read(M.Key);
-                                await SendClientReadResponse(X);
-                                break;
+                                {
+                                    var Client = M.Source;
+                                    UpdateNodeNetwork(Client);
+                                    KVTable X = await Read(M.Key);
+                                    await SendClientReadResponse(X);
+                                    break;
+                                }
+
+                            case MessageType.ClientWriteRequest:
+                                {
+                                    var Client = M.Source;
+                                    UpdateNodeNetwork(Client);
+                                    await Write(M.Key, M.Value);
+                                    break;
+                                }
 
                             case MessageType.JoinRequest:
                                 Console.WriteLine("Received join request. Sending back the assigned ID.");

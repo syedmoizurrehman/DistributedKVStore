@@ -86,7 +86,7 @@ namespace NetworkLayer
         /// <returns></returns>
         public static async Task<byte[]> ListenAsync(int port)
         {
-            var Buffer = new byte[1000];
+            var Buffer = new byte[65536];
             IPEndPoint LocalEndPoint = new IPEndPoint(IPAddress.Any, port);
             Socket SenderSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             SenderSocket.Bind(LocalEndPoint);
@@ -94,11 +94,11 @@ namespace NetworkLayer
             Socket HandlerSocket = await SenderSocket.AcceptAsync();
             int X = await HandlerSocket.ReceiveAsync(Buffer);
             Console.WriteLine(X + " bytes received.");
-            Console.WriteLine(Encoding.ASCII.GetString(Buffer));
             //SenderSocket.Shutdown(SocketShutdown.Both);
             SenderSocket.Close();
             byte[] ActualDataReceived = new byte[X];
             Array.Copy(Buffer, 0, ActualDataReceived, 0, X);
+            Console.WriteLine(Encoding.ASCII.GetString(ActualDataReceived));
             return ActualDataReceived;
         }
     }
