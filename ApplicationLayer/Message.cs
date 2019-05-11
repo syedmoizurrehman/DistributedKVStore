@@ -366,7 +366,7 @@ namespace ApplicationLayer
             if (Source.Status == NodeStatus.Client || Type == MessageType.FailureIndication || Network == null)
                 shareNetwork = false;
 
-            int NodeCount = Network.Count;
+            int NodeCount = Network?.Count ?? -1;
             if (Network?.ContainsKey(-1) == true)    // Clear client's info
                 NodeCount--;
 
