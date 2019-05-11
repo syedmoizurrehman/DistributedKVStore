@@ -380,17 +380,15 @@ namespace ApplicationLayer
             switch (Type)
             {
                 case MessageType.KeyRequest:
+                case MessageType.ClientReadRequest:
+                case MessageType.KeyQuery:
+                case MessageType.WriteAcknowledgement:
                     Obj.Append("KEY: ").AppendLine(Key);
                     break;
 
                 case MessageType.KeyAcknowledgement:
                     Obj.Append("KEY: ").AppendLine(Key);        // Assuming the requested nodes will always have the keys.
                     Obj.Append("TIMESTAMP: ").AppendLine(KeyTimestamp.ToUnixTimeSeconds().ToString());
-                    break;
-
-                case MessageType.ClientReadRequest:
-                case MessageType.KeyQuery:
-                    Obj.Append("KEY: ").AppendLine(Key);
                     break;
 
                 case MessageType.ClientReadResponse:
@@ -420,9 +418,6 @@ namespace ApplicationLayer
                 case MessageType.WriteRequest:
                     Obj.Append("KEY: ").AppendLine(Key);
                     Obj.Append("VALUE: ").AppendLine(Value);
-                    break;
-
-                case MessageType.WriteAcknowledgement:
                     break;
 
                 case MessageType.FailureIndication:
@@ -489,6 +484,9 @@ namespace ApplicationLayer
                             switch (NewMessage.Type)
                             {
                                 case MessageType.KeyRequest:
+                                case MessageType.ClientReadRequest:
+                                case MessageType.WriteAcknowledgement:
+                                case MessageType.KeyQuery:
                                     NewMessage.Key = Line; break;
 
                                 case MessageType.KeyAcknowledgement:
@@ -497,9 +495,7 @@ namespace ApplicationLayer
                                     NewMessage.KeyTimestamp = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Line));
                                     break;
 
-                                case MessageType.KeyQuery:
-                                    NewMessage.Key = Line; break;
-
+                                case MessageType.ClientReadResponse:
                                 case MessageType.ValueResponse:
                                     NewMessage.Key = Line;
                                     Line = Reader.ReadLine().Split(':')[1].Trim();
@@ -529,9 +525,6 @@ namespace ApplicationLayer
                                     NewMessage.Key = Line;
                                     Line = Reader.ReadLine().Split(':')[1].Trim();
                                     NewMessage.Value = Line;
-                                    break;
-
-                                case MessageType.WriteAcknowledgement:
                                     break;
 
                                 case MessageType.FailureIndication:
