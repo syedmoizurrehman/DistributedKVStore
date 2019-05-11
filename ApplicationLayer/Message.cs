@@ -345,6 +345,9 @@ namespace ApplicationLayer
             Obj.Append("DESTINATION:").AppendLine(Destination.Address.ToString());
             Obj.Append("TYPE:").AppendLine(Type.ToString());
             Obj.Append("SOURCE-ID:").AppendLine(Source.Index.ToString());     // ID of Source node.
+            if (Source.Status == NodeStatus.Client || Type == MessageType.FailureIndication)
+                shareNetwork = false;
+
             Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? Network.Count.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared.
             if (shareNetwork)
             {
