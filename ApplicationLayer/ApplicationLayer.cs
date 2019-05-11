@@ -548,11 +548,11 @@ namespace ApplicationLayer
 
             Console.WriteLine("Initiating Gossip protocol.");
             // Send a random node the information of the new node.
-            int RandomNodeIndex;
-            do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(1, NodeNetwork.Count);
-            while (RandomNodeIndex == newNode.Index);       // If the random generated node is new node, generate a different index.
+            int RandomIdIndex;
+            do RandomIdIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(1, NodeNetwork.Count);
+            while (RandomIdIndex == newNode.Index);       // If the random generated node is new node, generate a different index.
 
-            return SendIntroduction(RandomNodeIndex, newNode.Index);
+            return SendIntroduction(NodeNetwork.Keys.ElementAt(RandomIdIndex), newNode.Index);
         }
 
         private void UpdateNodeNetwork(Dictionary<int, Node> nodeNetwork)
