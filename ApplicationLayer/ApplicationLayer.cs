@@ -400,10 +400,7 @@ namespace ApplicationLayer
                                 N.Status = NodeStatus.Node;
                                 N.CoordinatorAddress = Address;
                                 N.NodeNetwork?.Clear();   // Networks of other nodes are not stored.
-                                if (NodeNetwork.ContainsKey(N.Index))
-                                    NodeNetwork[N.Index] = N;
-                                else
-                                    NodeNetwork.Add(N.Index, N);
+                                UpdateNodeNetwork(N);
                                 await SendJoinResponse();
                                 await InitiateGossip(N);
                                 break;
@@ -498,8 +495,8 @@ namespace ApplicationLayer
                     NodeNetwork[nodeNetwork[i].Index] = nodeNetwork[i];
                 else
                 {
-                    Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
                     NodeNetwork.Add(nodeNetwork[i].Index, nodeNetwork[i]);
+                    Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
                 }
             }
         }
@@ -510,8 +507,8 @@ namespace ApplicationLayer
                 NodeNetwork[newNode.Index] = newNode;
             else
             {
-                Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
                 NodeNetwork.Add(newNode.Index, newNode);
+                Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
             }
         }
     }
