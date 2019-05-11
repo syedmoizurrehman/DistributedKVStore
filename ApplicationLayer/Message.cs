@@ -366,14 +366,16 @@ namespace ApplicationLayer
             if (Source.Status == NodeStatus.Client || Type == MessageType.FailureIndication || Network == null)
                 shareNetwork = false;
 
-            if (Network != null && Network.ContainsKey(-1))    // Clear client's info.
-                Network.Remove(-1);
+            int NodeCount = Network.Count;
+            if (Network?.ContainsKey(-1) == true)    // Clear client's info
+                NodeCount--;
 
-            Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? Network.Count.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared
+            Obj.Append("NODE-COUNT:").AppendLine(shareNetwork ? NodeCount.ToString() : "-1");     // Total number of nodes in network. -1 indicates network information was not shared
             if (shareNetwork)
             {
                 foreach (int Key in Network.Keys)
                 {
+                    if (Key == -1) continue;    // Skip client's info
                     Obj.Append("ID:").AppendLine(Network[Key].Index.ToString());
                     Obj.Append("STATUS:").AppendLine(Network[Key].Status.ToString());
                     Obj.Append("ADDRESS:").AppendLine(Network[Key].Address.ToString());

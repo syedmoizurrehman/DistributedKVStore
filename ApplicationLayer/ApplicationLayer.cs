@@ -576,7 +576,7 @@ namespace ApplicationLayer
             else
             {
                 NodeNetwork.Add(newNode.Index, newNode);
-                Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
+                Console.WriteLine($"Adding node {Index} to network. Ring Size = " + RingSize);
             }
         }
     }
