@@ -142,6 +142,7 @@ namespace ApplicationLayer
 
                         Index = M.NewNode.Index;
                         UpdateNodeNetwork(M.Network);
+                        await SqliteDatabase.InitializeDatabase();
                         break;
 
                     case NodeStatus.Client:

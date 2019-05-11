@@ -29,21 +29,15 @@ namespace DataAccess
 
         public static SQLiteAsyncConnection CoordinatorLookup { get; set; }
 
-
-        static SqliteDatabase()
+        public static async Task InitializeDatabase()
         {
             var FilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "KVDatabase.db");
             Database = new SQLiteAsyncConnection(FilePath);
             if (File.Exists(FilePath))
-            {
                 Database = new SQLiteAsyncConnection(FilePath, SQLiteOpenFlags.ReadWrite);
-                //SyncDb.CreateTable<KVTable>();
-            }
+
             else
-            {
-                var SyncDb = new SQLiteConnection(FilePath);
-                SyncDb.CreateTable<KVTable>();
-            }
+                await Database.CreateTableAsync<CoordinatorLookupTable>();
         }
 
         public static async Task InitializeLookupTable()
