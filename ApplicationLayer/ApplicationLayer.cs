@@ -265,6 +265,11 @@ namespace ApplicationLayer
                     Message CoordResponse;
                     /*do*/ CoordResponse = await ListenAsync();
                     //while (CoordResponse.Type != MessageType.ClientReadResponse && CoordResponse.Source.Address != CoordinatorAddress);
+                    if (CoordResponse.Type == MessageType.FailureIndication)
+                    {
+                        Console.WriteLine(CoordResponse.FailureMessage);
+                        return null;
+                    }
                     Console.WriteLine("Read successful.");
                     return new KVTable { Key = CoordResponse.Key, Value = CoordResponse.Value, TimeStamp = CoordResponse.KeyTimestamp };
             }
