@@ -174,15 +174,22 @@ namespace ApplicationLayer
             }
         }
 
-        public async Task Write(string key, string value)
+        public async Task<bool> Write(string key, string value)
         {
             switch (Status)
             {
                 case NodeStatus.Node:
                     Console.WriteLine("Writing to database...");
-                    await SqliteDatabase.InsertKeyValuePairAsync(key, value);
-                    Console.WriteLine("Finished writing to database.");
-                    break;
+                    if (await SqliteDatabase.InsertKeyValuePairAsync(key, value))
+                    {
+                        Console.WriteLine("Write completed successfully.");
+                        return true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Failed to write to database. Key already exists.");
+                        return false;
+                    }
 
                 case NodeStatus.Coordinator:
                     Console.WriteLine("Contacting quorum nodes for the given key...");
@@ -195,13 +202,16 @@ namespace ApplicationLayer
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
                         Console.WriteLine("Received response from " + i+1 + " Node.");
+                        if (Response.Type == MessageType.FailureIndication)
+                        {
+                            Console.WriteLine(Response.FailureMessage);
+                            return false;
+                        }
                         Responses.Add(Response);
                     }
-                    // Notify client about write
-                    await SendClientWriteResponse(new KVTable { Key = Responses[0].Key, Value = Responses[0].Value, TimeStamp = Responses[0].KeyTimestamp });
                     Console.WriteLine("Key-Value pair inserted.");
                     await SqliteDatabase.InsertLookupEntry(key, RingSize);
-                    break;
+                    return true;
 
                 case NodeStatus.Client:
                     Console.WriteLine("Requesting Coordinator for database write...");
@@ -209,8 +219,18 @@ namespace ApplicationLayer
                     Message CoordResponse;
                     /*do*/ CoordResponse = await ListenAsync();
                     //while (CoordResponse.Type != MessageType.ClientWriteResponse && CoordResponse.Source.Address != CoordinatorAddress);
-                    Console.WriteLine("Write successful.");
-                    break;
+                    if (CoordResponse.Type == MessageType.FailureIndication)
+                    {
+                        Console.WriteLine(CoordResponse.FailureMessage);
+                        return false;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Write successful.");
+                        return true;
+                    }
+                default:
+                    return false;
             }
         }
 
@@ -312,10 +332,16 @@ namespace ApplicationLayer
             return SendAsync(0, M);
         }
 
-        public Task SendClientWriteResponse(KVTable writtenRecord)
+        public Task SendClientWriteResponse(string key, string value)
         {
-            var M = Message.ConstructClientWriteResponse(this, NodeNetwork[0], writtenRecord.Key, writtenRecord.Value, writtenRecord.TimeStamp);
+            var M = Message.ConstructClientWriteResponse(this, NodeNetwork[0], key, value);
             return SendAsync(0, M);
+        }
+
+        public Task SendFailureIndication(int nodeIndex, string failureMessaeg)
+        {
+            var M = Message.ConstructFailureMessage(this, NodeNetwork[nodeIndex], failureMessaeg);
+            return SendAsync(nodeIndex, M);
         }
 
         private Task SendKeyQuery(int nodeIndex, string key)
@@ -414,7 +440,11 @@ namespace ApplicationLayer
                                 {
                                     var Client = M.Source;
                                     UpdateNodeNetwork(Client);
-                                    await Write(M.Key, M.Value);
+                                    if (await Write(M.Key, M.Value))
+                                        await SendClientWriteResponse(M.Key, M.Value);
+
+                                    else
+                                        await SendFailureIndication(Client.Index, "Failed to write. Key possibly already exists."); ;
                                     break;
                                 }
 

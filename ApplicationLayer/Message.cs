@@ -157,7 +157,7 @@ namespace ApplicationLayer
             };
         }
 
-        public static Message ConstructClientWriteResponse(Node coordinator, Node client, string key, string value, DateTimeOffset timestamp)
+        public static Message ConstructClientWriteResponse(Node coordinator, Node client, string key, string value)
         {
             return new Message
             {
@@ -166,7 +166,6 @@ namespace ApplicationLayer
                 Destination = client,
                 Key = key,
                 Value = value,
-                KeyTimestamp = timestamp
             };
         }
 
