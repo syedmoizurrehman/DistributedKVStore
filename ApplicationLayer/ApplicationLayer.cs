@@ -30,6 +30,8 @@ namespace ApplicationLayer
         /// </summary>
         public int Index { get; internal set; }
 
+        public int RingSize => NodeNetwork.Count - 1;
+
         public NodeStatus Status { get; set; }
 
         /// <summary>
@@ -61,18 +63,18 @@ namespace ApplicationLayer
         /// </summary>
         public static int GossipCount { get; internal set; }
 
-        private static List<int> GetHash(string key)
+        private static List<int> GetHash(string key, int ringSize)
         {
             HashAlgorithm HashAlgo = HashAlgorithm.Create();
             HashAlgo.ComputeHash(Encoding.UTF8.GetBytes(key));
             var Indices = new List<int>();
             for (int i = 0; i < AppProperties.ReplicationFactor; i++)
             {
-                int Index = Math.Abs(BitConverter.ToInt32(HashAlgo.Hash, i % HashAlgo.HashSize) % AppProperties.RingSize);
+                int Index = Math.Abs(BitConverter.ToInt32(HashAlgo.Hash, i % HashAlgo.HashSize) % ringSize);
                 while (Indices.Contains(Index) || Index == 0)
                 {
                     Index++;
-                    Index %= AppProperties.RingSize;
+                    Index %= ringSize;
                 }
                 Indices.Add(Index);
             }
@@ -98,7 +100,7 @@ namespace ApplicationLayer
                 Status = NodeStatus.Client;
             else
                 Status = NodeStatus.Node;
-            GossipCount = AppProperties.RingSize / 4;
+            GossipCount = RingSize / 4;
             PollDelay = 500;
             if (IsHost)
             {
@@ -118,6 +120,7 @@ namespace ApplicationLayer
                         Index = 0;
                         // Add coordinator (self) to network list.
                         NodeNetwork.Add(Index, this);
+                        await SqliteDatabase.InitializeLookupTable();
                         break;
 
                     case NodeStatus.Node:   // Only knows Coord's IP, nothing about the node network at this point.
@@ -125,8 +128,8 @@ namespace ApplicationLayer
                         await NodeNetwork[0].Initialize();
                         await SendJoinRequest();
                         Message M;
-                        do M = await ListenAsync();
-                        while (M.Type != MessageType.JoinResponse && M.Source.Address != CoordinatorAddress);
+                        /*do*/ M = await ListenAsync();
+                        //while (M.Type != MessageType.JoinResponse && M.Source.Address != CoordinatorAddress);
 
                         Index = M.NewNode.Index;
                         UpdateNodeNetwork(M.Network);
@@ -166,23 +169,37 @@ namespace ApplicationLayer
             switch (Status)
             {
                 case NodeStatus.Node:
+                    Console.WriteLine("Writing to database...");
+                    await SqliteDatabase.InsertKeyValuePairAsync(key, value);
+                    Console.WriteLine("Finished writing to database.");
                     break;
+
                 case NodeStatus.Coordinator:
-                    List<int> ReplicaIndices = GetHash(key);
+                    Console.WriteLine("Contacting quorum nodes for the given key...");
+                    List<int> ReplicaIndices = GetHash(key, RingSize);
                     List<Message> Responses = new List<Message>();
-                    for (int i = 0; i < AppProperties.RingSize; i++)
+                    for (int i = 0; i < RingSize; i++)
                     {
                         Message Response;
                         await SendWriteRequest(ReplicaIndices[i], key, value);
-                        do Response = await ListenAsync();
-                        while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
-
+                        /*do*/ Response = await ListenAsync();
+                        //while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
+                        Console.WriteLine("Received response from " + i+1 + " Node.");
                         Responses.Add(Response);
                     }
-                    // notify client about write
-                    // await sendclientwriteack
+                    // Notify client about write
+                    await SendClientWriteResponse(new KVTable { Key = Responses[0].Key, Value = Responses[0].Value, TimeStamp = Responses[0].KeyTimestamp });
+                    Console.WriteLine("Key-Value pair inserted.");
+                    await SqliteDatabase.InsertLookupEntry(key, RingSize);
                     break;
+
                 case NodeStatus.Client:
+                    Console.WriteLine("Requesting Coordinator for database write...");
+                    await SendClientWriteRequest(key, value);
+                    Message CoordResponse;
+                    /*do*/ CoordResponse = await ListenAsync();
+                    //while (CoordResponse.Type != MessageType.ClientWriteResponse && CoordResponse.Source.Address != CoordinatorAddress);
+                    Console.WriteLine("Write successful.");
                     break;
             }
         }
@@ -192,19 +209,37 @@ namespace ApplicationLayer
             switch (Status)
             {
                 case NodeStatus.Node:
-                    return await SqliteDatabase.GetValueAsync(key);
+                    Console.WriteLine("Reading from database...");
+                    var ReadResult = await SqliteDatabase.GetValueAsync(key);
+                    Console.WriteLine("Finished reading from database...");
+                    return ReadResult;
 
                 case NodeStatus.Coordinator:
-                    List<int> ReplicaIndices = GetHash(key);
+                    CoordinatorLookupTable Lookup = await SqliteDatabase.GetLookupEntryAsync(key);
+                    if (Lookup == null)
+                    {
+                        Console.WriteLine("Key not found.");
+                        return null;
+                    }
+                    // Use the RingSize from when the key was last updated/written.
+                    int KeyRingSize = Lookup.RingSize;
+                    if (Lookup.RingSize != RingSize)
+                    {
+                        // Key-Node mapping is different.
+                        // TODO: Delete database records from nodes with keys having old ring size
+                        // Insert them into nodes mapped to new ring size.
+                    }
+
+                    List<int> ReplicaIndices = GetHash(key, KeyRingSize);
                     List<Message> Responses = new List<Message>();
                     DateTimeOffset MaxTimeStamp = DateTimeOffset.MinValue;
                     int LatestIndex = -1;
-                    for (int i = 0; i < 1/*AppProperties.RingSize*/; i++)
+                    for (int i = 0; i < KeyRingSize/*AppProperties.RingSize*/; i++)
                     {
                         await SendKeyRequest(ReplicaIndices[i], key);
                         Message Response;
-                        do Response = await ListenAsync();
-                        while (Response.Type != MessageType.KeyAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
+                        /*do*/ Response = await ListenAsync();
+                        //while (Response.Type != MessageType.KeyAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
                         if (string.IsNullOrEmpty(Response.Key))
                             continue;
 
@@ -220,35 +255,29 @@ namespace ApplicationLayer
 
                     await SendKeyQuery(Responses[LatestIndex].Source.Index, key);
                     Message ValueResponse;
-                    do ValueResponse = await ListenAsync();
-                    while (ValueResponse.Type != MessageType.ValueResponse && !ReplicaIndices.Contains(ValueResponse.Source.Index));
+                    /*do*/ ValueResponse = await ListenAsync();
+                    //while (ValueResponse.Type != MessageType.ValueResponse && !ReplicaIndices.Contains(ValueResponse.Source.Index));
                     return new KVTable { Key = key, Value = ValueResponse.Value, TimeStamp = ValueResponse.KeyTimestamp };
 
                 case NodeStatus.Client:
                     Console.WriteLine("Requesting Coordinator for the key...");
                     await SendClientReadRequest(key);
                     Message CoordResponse;
-                    do CoordResponse = await ListenAsync();
-                    while (CoordResponse.Type != MessageType.ClientReadResponse && CoordResponse.Source.Address != CoordinatorAddress);
-                    Console.WriteLine("");
+                    /*do*/ CoordResponse = await ListenAsync();
+                    //while (CoordResponse.Type != MessageType.ClientReadResponse && CoordResponse.Source.Address != CoordinatorAddress);
+                    Console.WriteLine("Read successful.");
                     return new KVTable { Key = CoordResponse.Key, Value = CoordResponse.Value, TimeStamp = CoordResponse.KeyTimestamp };
             }
             return null;
         }
 
-        private Task SendWriteRequest(int nodeIndex, string key, string value)
-        {
-            var M = Message.ConstructWriteRequest(this, NodeNetwork[nodeIndex], key, value);
-            return SendAsync(nodeIndex, M);
-        }
-
-        private Task SendClientReadRequest(string key)
+        public Task SendClientReadRequest(string key)
         {
             var M = Message.ConstructClientReadRequest(this, NodeNetwork[0], key);
             return SendAsync(0, M);
         }
 
-        private Task SendClientReadResponse(KVTable readResult)
+        public Task SendClientReadResponse(KVTable readResult)
         {
             Message M;
             if (readResult == null)
@@ -262,9 +291,27 @@ namespace ApplicationLayer
             return SendAsync(-1, M);
         }
 
+        public Task SendClientWriteRequest(string key, string value)
+        {
+            var M = Message.ConstructClientWriteRequest(this, NodeNetwork[0], key, value);
+            return SendAsync(0, M);
+        }
+
+        public Task SendClientWriteResponse(KVTable writtenRecord)
+        {
+            var M = Message.ConstructClientWriteResponse(this, NodeNetwork[0], writtenRecord.Key, writtenRecord.Value, writtenRecord.TimeStamp);
+            return SendAsync(0, M);
+        }
+
         private Task SendKeyQuery(int nodeIndex, string key)
         {
             var M = Message.ConstructKeyQuery(this, NodeNetwork[nodeIndex], NodeNetwork, key);
+            return SendAsync(nodeIndex, M);
+        }
+
+        public Task SendWriteRequest(int nodeIndex, string key, string value)
+        {
+            var M = Message.ConstructWriteRequest(this, NodeNetwork[nodeIndex], key, value);
             return SendAsync(nodeIndex, M);
         }
 
@@ -315,7 +362,6 @@ namespace ApplicationLayer
             return SendAsync(nodeIndex, M);
         }
 
-
         public Task SendAsync(int nodeIndex, Message message)
         {
             return Network.SendAsync(NodeNetwork[nodeIndex].Address, AppProperties.PortNumber, Encoding.ASCII.GetBytes(message.Serialize()));
@@ -348,7 +394,7 @@ namespace ApplicationLayer
                                 break;
 
                             case MessageType.JoinRequest:
-                                Console.WriteLine("Received join request. Sending back the ID to be assigned.");
+                                Console.WriteLine("Received join request. Sending back the assigned ID.");
                                 var N = M.Source;
                                 N.Index = NodeNetwork.Count;
                                 N.Status = NodeStatus.Node;
@@ -358,7 +404,7 @@ namespace ApplicationLayer
                                     NodeNetwork[N.Index] = N;
                                 else
                                     NodeNetwork.Add(N.Index, N);
-                                await SendJoinResponse(); Console.WriteLine("Initiating Gossip protocol.");
+                                await SendJoinResponse();
                                 await InitiateGossip(N);
                                 break;
 
@@ -435,9 +481,10 @@ namespace ApplicationLayer
             if (NodeNetwork.Count < 3)
                 return Task.CompletedTask;
 
+            Console.WriteLine("Initiating Gossip protocol.");
             // Send a random node the information of the new node.
             int RandomNodeIndex;
-            do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(0, AppProperties.RingSize);
+            do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(1, NodeNetwork.Count);
             while (RandomNodeIndex == NodeNetwork.Count - 1);       // If the random generated node is new node, generate a different index.
 
             return SendIntroduction(RandomNodeIndex);
@@ -450,7 +497,10 @@ namespace ApplicationLayer
                 if (NodeNetwork.ContainsKey(nodeNetwork[i].Index))
                     NodeNetwork[nodeNetwork[i].Index] = nodeNetwork[i];
                 else
+                {
+                    Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
                     NodeNetwork.Add(nodeNetwork[i].Index, nodeNetwork[i]);
+                }
             }
         }
 
@@ -459,7 +509,10 @@ namespace ApplicationLayer
             if (NodeNetwork.ContainsKey(newNode.Index))
                 NodeNetwork[newNode.Index] = newNode;
             else
+            {
+                Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
                 NodeNetwork.Add(newNode.Index, newNode);
+            }
         }
     }
 }

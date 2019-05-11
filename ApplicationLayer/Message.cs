@@ -145,6 +145,31 @@ namespace ApplicationLayer
             };
         }
 
+        public static Message ConstructClientWriteRequest(Node client, Node coordinator, string key, string value)
+        {
+            return new Message
+            {
+                Type = MessageType.ClientWriteRequest,
+                Source = client,
+                Destination = coordinator,
+                Key = key,
+                Value = value
+            };
+        }
+
+        public static Message ConstructClientWriteResponse(Node coordinator, Node client, string key, string value, DateTimeOffset timestamp)
+        {
+            return new Message
+            {
+                Type = MessageType.ClientWriteResponse,
+                Source = coordinator,
+                Destination = client,
+                Key = key,
+                Value = value,
+                KeyTimestamp = timestamp
+            };
+        }
+
         public static Message ConstructWriteRequest(Node source, Node coordinator, string key, string value)
         {
             return new Message
@@ -156,7 +181,6 @@ namespace ApplicationLayer
                 Value = value
             };
         }
-
 
         /// <summary>
         /// Request sent by a new node to coordinator to be introduced to the network.
