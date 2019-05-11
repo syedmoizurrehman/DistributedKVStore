@@ -37,7 +37,7 @@ namespace DataAccess
                 Database = new SQLiteAsyncConnection(FilePath, SQLiteOpenFlags.ReadWrite);
 
             else
-                await Database.CreateTableAsync<CoordinatorLookupTable>();
+                await Database.CreateTableAsync<KVTable>();
         }
 
         public static async Task InitializeLookupTable()
@@ -51,13 +51,18 @@ namespace DataAccess
                 await CoordinatorLookup.CreateTableAsync<CoordinatorLookupTable>();
         }
 
-        public static async Task InsertLookupEntry(string key, int ringSize)
+        public static async Task<bool> InsertLookupEntry(string key, int ringSize)
         {
-            int s = await CoordinatorLookup.InsertAsync(new CoordinatorLookupTable()
+            try
             {
-                Key = key,
-                RingSize = ringSize
-            });
+                int s = await CoordinatorLookup.InsertAsync(new CoordinatorLookupTable()
+                {
+                    Key = key,
+                    RingSize = ringSize
+                });
+                return true;
+            }
+            catch (SQLiteException) { return false; }
         }
         
         public static async Task<CoordinatorLookupTable> GetLookupEntryAsync(string key)
@@ -83,14 +88,19 @@ namespace DataAccess
             });
         }
 
-        public static async Task InsertKeyValuePairAsync(string key, string value)
+        public static async Task<bool> InsertKeyValuePairAsync(string key, string value)
         {
-            int s = await Database.InsertAsync(new KVTable()
+            try
             {
-                Key = key,
-                Value = value,
-                TimeStamp = DateTimeOffset.Now
-            });
+                int s = await Database.InsertAsync(new KVTable()
+                {
+                    Key = key,
+                    Value = value,
+                    TimeStamp = DateTimeOffset.Now
+                });
+                return true;
+            }
+            catch (SQLiteException) { return false; }
         }
 
         public static async Task<KVTable> GetValueAsync(string key)
