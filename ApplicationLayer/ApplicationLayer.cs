@@ -201,7 +201,7 @@ namespace ApplicationLayer
                         await SendWriteRequest(ReplicaIndices[i], key, value);
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
-                        Console.WriteLine("Received response from " + i+1 + " Node.");
+                        Console.WriteLine("Received response from " + (i+1).ToString() + " Node.");
                         if (Response.Type == MessageType.FailureIndication)
                         {
                             Console.WriteLine(Response.FailureMessage);
@@ -334,8 +334,8 @@ namespace ApplicationLayer
 
         public Task SendClientWriteResponse(string key, string value)
         {
-            var M = Message.ConstructClientWriteResponse(this, NodeNetwork[0], key, value);
-            return SendAsync(0, M);
+            var M = Message.ConstructClientWriteResponse(this, NodeNetwork[-1], key, value);
+            return SendAsync(-1, M);
         }
 
         public Task SendFailureIndication(int nodeIndex, string failureMessaeg)
@@ -370,19 +370,19 @@ namespace ApplicationLayer
         /// Sends to the node added most recently to the network of nodes.
         /// </summary>
         /// <returns></returns>
-        public Task SendJoinResponse()
+        public Task SendJoinResponse(int newNodeId)
         {
-            return SendAsync(NodeNetwork.Count - 1, Message.ConstructJoinResponse(this, NodeNetwork[NodeNetwork.Count - 1], NodeNetwork));
+            return SendAsync(newNodeId, Message.ConstructJoinResponse(this, NodeNetwork[newNodeId], NodeNetwork));
         }
 
         /// <summary>
         /// Introduces the specified node to the network.
         /// </summary>
         /// <returns></returns>
-        public Task SendIntroduction(int nodeIndex)
+        public Task SendIntroduction(int nodeIndex, int newNodeId)
         {
             return SendAsync(nodeIndex,
-                Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork, NodeNetwork.Count - 1, GossipCount));
+                Message.ConstructJoinIntroduction(this, NodeNetwork[nodeIndex], NodeNetwork, newNodeId, GossipCount));
         }
 
         public Task Ping(int targetNodeIndex)
@@ -456,12 +456,12 @@ namespace ApplicationLayer
                             case MessageType.JoinRequest:
                                 Console.WriteLine("Received join request. Sending back the assigned ID.");
                                 var N = M.Source;
-                                N.Index = NodeNetwork.Count;
+                                N.Index = Convert.ToInt32(N.Address.ToString().Split('.').Last());
                                 N.Status = NodeStatus.Node;
                                 N.CoordinatorAddress = Address;
                                 N.NodeNetwork?.Clear();   // Networks of other nodes are not stored.
                                 UpdateNodeNetwork(N);
-                                await SendJoinResponse();
+                                await SendJoinResponse(N.Index);
                                 await InitiateGossip(N);
                                 break;
 
@@ -525,7 +525,7 @@ namespace ApplicationLayer
                                 Console.WriteLine("Received introduction of a new node. Initiating Gossip protocol.");
                                 UpdateNodeNetwork(M.Network);
                                 if (M.GossipCount > 0)
-                                    await SendIntroduction(NodeNetwork.Count - 1);
+                                    await InitiateGossip(NodeNetwork[M.NewNode.Index]) /*SendIntroduction(NodeNetwork.Count - 1)*/;
                                 break;
 
                             case MessageType.ValueResponse:
@@ -550,9 +550,9 @@ namespace ApplicationLayer
             // Send a random node the information of the new node.
             int RandomNodeIndex;
             do RandomNodeIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(1, NodeNetwork.Count);
-            while (RandomNodeIndex == NodeNetwork.Count - 1);       // If the random generated node is new node, generate a different index.
+            while (RandomNodeIndex == newNode.Index);       // If the random generated node is new node, generate a different index.
 
-            return SendIntroduction(RandomNodeIndex);
+            return SendIntroduction(RandomNodeIndex, newNode.Index);
         }
 
         private void UpdateNodeNetwork(Dictionary<int, Node> nodeNetwork)
