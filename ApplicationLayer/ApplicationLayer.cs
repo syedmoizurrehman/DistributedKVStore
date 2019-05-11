@@ -523,7 +523,7 @@ namespace ApplicationLayer
 
                             case MessageType.JoinIntroduction:
                                 Console.WriteLine("Received introduction of a new node. Initiating Gossip protocol.");
-                                UpdateNodeNetwork(M.NewNode);
+                                UpdateNodeNetwork(M.Network);
                                 if (M.GossipCount > 0)
                                     await SendIntroduction(NodeNetwork.Count - 1);
                                 break;
