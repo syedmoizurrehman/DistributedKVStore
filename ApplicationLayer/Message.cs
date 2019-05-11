@@ -182,6 +182,24 @@ namespace ApplicationLayer
         }
 
         /// <summary>
+        /// Acknowledgement of WriteRequest sent from the node to coordinator indicating successful write.
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="coordinator"></param>
+        /// <param name="key"></param>
+        /// <returns></returns>
+        public static Message ConstructWriteAcknowledgment(Node source, Node coordinator, string key)
+        {
+            return new Message
+            {
+                Type = MessageType.WriteAcknowledgement,
+                Source = source,
+                Destination = coordinator,
+                Key = key,
+            };
+        }
+
+        /// <summary>
         /// Request sent by a new node to coordinator to be introduced to the network.
         /// </summary>
         /// <param name="source"></param>

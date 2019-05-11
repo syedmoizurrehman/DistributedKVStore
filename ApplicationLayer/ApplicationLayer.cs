@@ -356,6 +356,11 @@ namespace ApplicationLayer
             return SendAsync(nodeIndex, M);
         }
 
+        public Task SendWriteAcknowledgement(string key)
+        {
+            return SendAsync(0, Message.ConstructWriteAcknowledgment(this, NodeNetwork[0], key));
+        }
+
         public Task SendJoinRequest()
         {
             return SendAsync(0, Message.ConstructJoinRequest(this, NodeNetwork[0]));
@@ -469,6 +474,7 @@ namespace ApplicationLayer
                             // Coord receives these messages only in specific methods.
                             //case MessageType.KeyAcknowledgement:
                             //case MessageType.ValueResponse:
+                            //MessageType.WriteAcknowledgement
                                 //break;
                             
                             // Coord should not receive these messages
@@ -486,6 +492,13 @@ namespace ApplicationLayer
                         Message M = await ListenAsync();
                         switch (M.Type)
                         {
+                            case MessageType.WriteRequest:
+                                if (await Write(M.Key, M.Value))
+                                    await SendWriteAcknowledgement(M.Key);
+                                else
+                                    await SendFailureIndication(0, "Failed to write to database. Key already exists.");
+                                break;
+
                             case MessageType.KeyRequest:
                                 Console.WriteLine("Received Key request from coordinator.");
                                 var X = await Read(M.Key);
