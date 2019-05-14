@@ -75,7 +75,7 @@ namespace NetworkLayer
             using (var TimeoutCancellationTokenSource = new CancellationTokenSource())
             {
                 var T = ClientSocket.ConnectAsync(RemoteEndPoint);
-                var CompletedTask = Task.WhenAny(T, Task.Delay(Properties.NetworkTimeout, TimeoutCancellationTokenSource.Token));
+                var CompletedTask = await Task.WhenAny(T, Task.Delay(Properties.NetworkTimeout, TimeoutCancellationTokenSource.Token));
                 if (CompletedTask == T)
                 {
                     await T;
