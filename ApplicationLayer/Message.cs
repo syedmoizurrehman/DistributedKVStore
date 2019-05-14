@@ -9,6 +9,11 @@ namespace ApplicationLayer
     public enum MessageType
     {
         /// <summary>
+        /// Represents an uninitialized message which cannot be sent or received.
+        /// </summary>
+        Empty,
+
+        /// <summary>
         /// Message from client to coordinator requesting a database read.
         /// </summary>
         ClientReadRequest,
@@ -80,6 +85,16 @@ namespace ApplicationLayer
         WriteAcknowledgement,
 
         /// <summary>
+        /// Request from Coordinator to a node requesting to delete a record with specified key.
+        /// </summary>
+        DeleteRequest,
+
+        /// <summary>
+        /// Aclnowledgement from node indicating successful deletion of requested record.
+        /// </summary>
+        DeleteAcknowledgement,
+
+        /// <summary>
         /// Message from any node indicating a failure to execute a requested operation.
         /// </summary>
         FailureIndication,
@@ -109,6 +124,15 @@ namespace ApplicationLayer
         public int GossipCount { get; private set; }
 
         public DateTimeOffset KeyTimestamp { get; private set; }
+
+        /// <summary>
+        /// An empty message which represnts <see langword="null"/> value for <see cref="MessageType"/>.
+        /// </summary>
+        /// <returns></returns>
+        public static Message ConstructEmptyMessage()
+        {
+            return new Message { Type = MessageType.Empty };
+        }
 
         public static Message ConstructClientReadRequest(Node client, Node coordinator, string key)
         {
@@ -195,6 +219,30 @@ namespace ApplicationLayer
             {
                 Type = MessageType.WriteAcknowledgement,
                 Source = source,
+                Destination = coordinator,
+                Key = key,
+            };
+        }
+
+        public static Message ConstructDeleteRequest(Node coordinator, Node destination, string key, Dictionary<int, Node> nodeNetwork)
+        {
+            return new Message
+            {
+                Type = MessageType.DeleteRequest,
+                Source = coordinator,
+                Destination = destination,
+                Network = nodeNetwork,
+                Key = key,
+            };
+        }
+
+        public static Message ConstructDeleteAcknowledgement(Node source, Node coordinator, string key, Dictionary<int, Node> nodeNetwork)
+        {
+            return new Message
+            {
+                Type = MessageType.DeleteAcknowledgement,
+                Source = source,
+                Network = nodeNetwork,
                 Destination = coordinator,
                 Key = key,
             };
@@ -386,6 +434,8 @@ namespace ApplicationLayer
 
             switch (Type)
             {
+                case MessageType.DeleteRequest:
+                case MessageType.DeleteAcknowledgement:
                 case MessageType.KeyRequest:
                 case MessageType.ClientReadRequest:
                 case MessageType.KeyQuery:
@@ -490,6 +540,8 @@ namespace ApplicationLayer
                         default:
                             switch (NewMessage.Type)
                             {
+                                case MessageType.DeleteRequest:
+                                case MessageType.DeleteAcknowledgement:
                                 case MessageType.KeyRequest:
                                 case MessageType.ClientReadRequest:
                                 case MessageType.WriteAcknowledgement:

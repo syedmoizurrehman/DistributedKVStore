@@ -174,6 +174,67 @@ namespace ApplicationLayer
             }
         }
 
+        public async Task<bool> Delete(string key)
+        {
+            switch (Status)
+            {
+                case NodeStatus.Node:
+                    if (await SqliteDatabase.DeleteValue(key))
+                        return true;
+                    return false;
+
+                case NodeStatus.Coordinator:
+                    CoordinatorLookupTable Lookup = await SqliteDatabase.GetLookupEntryAsync(key);
+                    if (Lookup == null)
+                    {
+                        Console.WriteLine("Key not found.");
+                        return false;
+                    }
+                    // Use the RingSize from when the key was last updated/written.
+                    int KeyRingSize = Lookup.RingSize;
+                    if (Lookup.RingSize != RingSize)
+                    {
+                        // Key-Node mapping is different.
+                        // TODO: Delete database records from nodes with keys having old ring size
+                        // Insert them into nodes mapped to new ring size.
+                    }
+                    List<int> ReplicaIndices = GetHash(key, KeyRingSize);
+                    List<Message> Responses = new List<Message>();
+                    for (int i = 0; i < KeyRingSize/*AppProperties.RingSize*/; i++)
+                    {
+                        await SendDeleteRequest(NodeNetwork.Keys.ElementAt(ReplicaIndices[i]), key);
+                        var Response = await ListenAsync();
+                        if (Response.Type == MessageType.FailureIndication)
+                        {
+                            Console.WriteLine("Failed to delete key. " + Response.FailureMessage);
+                            return false;
+                        }
+                        else
+                            Console.WriteLine("Key deleted successfully from replica# " + i + 1 + " out of " + KeyRingSize);
+                    }
+                    Console.WriteLine("Deleting Coordinator lookup...");
+                    await SqliteDatabase.DeleteLookupEntry(key);
+                    Console.WriteLine("Deleting successful.");
+                    return true;
+
+                case NodeStatus.Client:
+                    return false;
+
+                default:
+                    return false;
+            }
+        }
+
+        private Task SendDeleteRequest(int nodeId, string key)
+        {
+            return SendAsync(nodeId, Message.ConstructDeleteRequest(this, NodeNetwork[nodeId], key, NodeNetwork));
+        }
+
+        private Task SendDeleteAcknowledgement(int nodeId, string key)
+        {
+            return SendAsync(nodeId, Message.ConstructDeleteAcknowledgement(this, NodeNetwork[0], key, NodeNetwork));
+        }
+
         public async Task<bool> Write(string key, string value)
         {
             switch (Status)
@@ -198,7 +259,7 @@ namespace ApplicationLayer
                     for (int i = 0; i < RingSize; i++)
                     {
                         Message Response;
-                        await SendWriteRequest(ReplicaIndices[i], key, value);
+                        await SendWriteRequest(NodeNetwork.Keys.ElementAt(ReplicaIndices[i]), key, value);
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
                         Console.WriteLine("Received response from " + (i+1).ToString() + " Node.");
@@ -266,7 +327,7 @@ namespace ApplicationLayer
                     int LatestIndex = -1;
                     for (int i = 0; i < KeyRingSize/*AppProperties.RingSize*/; i++)
                     {
-                        await SendKeyRequest(ReplicaIndices[i], key);
+                        await SendKeyRequest(NodeNetwork.Keys.ElementAt(ReplicaIndices[i]), key);
                         Message Response;
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.KeyAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
@@ -416,6 +477,8 @@ namespace ApplicationLayer
         public async Task<Message> ListenAsync()
         {
             byte[] Result = await Network.ListenAsync(AppProperties.PortNumber);
+            if (Result == null)
+                return Message.ConstructEmptyMessage();
             return Message.Deserialize(Encoding.ASCII.GetString(Result));
         }
 
@@ -471,6 +534,10 @@ namespace ApplicationLayer
                             case MessageType.Ping:
                                 break;
 
+                            case MessageType.Empty:     // Timed out.
+                                // TODO: Update network by Gossip.
+                                continue;
+
                             // Coord receives these messages only in specific methods.
                             //case MessageType.KeyAcknowledgement:
                             //case MessageType.ValueResponse:
@@ -518,7 +585,15 @@ namespace ApplicationLayer
                             case MessageType.Ping:
                                 break;
 
-                            case MessageType.JoinResponse:
+                            case MessageType.DeleteRequest:
+                                if (await Delete(M.Key))
+                                {
+                                    Console.WriteLine("Successfully deleted record from database.");
+                                    await SendDeleteAcknowledgement(0, M.Key);
+                                }
+                                else
+                                    await SendFailureIndication(0, "Error deleting key from database. Key possibly does not exist.");
+
                                 break;
 
                             case MessageType.JoinIntroduction:
@@ -528,16 +603,18 @@ namespace ApplicationLayer
                                     await InitiateGossip(NodeNetwork[M.NewNode.Index]) /*SendIntroduction(NodeNetwork.Count - 1)*/;
                                 break;
 
+                            case MessageType.Empty:     // Timed out.
+                                // TODO: Gossip
+                                continue;
+
+                            case MessageType.JoinResponse:
                             case MessageType.ValueResponse:
-                                break;
                             case MessageType.JoinRequest:
-                                break;
                             case MessageType.KeyAcknowledgement:
                                 break;
                         }
 
                     }
-
             }
         }
 
