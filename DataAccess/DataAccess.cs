@@ -124,12 +124,17 @@ namespace DataAccess
             });
         }
 
-        public static async Task DeleteValue(string key)
+        public static async Task<bool> DeleteValue(string key)
         {
-            int s = await Database.DeleteAsync(new KVTable()
+            try
             {
-                Key = key,
-            });
+                int s = await Database.DeleteAsync(new KVTable()
+                {
+                    Key = key,
+                });
+                return true;
+            }
+            catch (SQLiteException) { return false; }
         }
     }
 }
