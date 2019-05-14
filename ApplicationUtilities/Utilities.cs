@@ -20,10 +20,16 @@ namespace AppUtilities
         public static int RingSize { get; set; }
 
         /// <summary>
+        /// Gets or sets the timeout timespan for underlying sockets in network layer.
+        /// </summary>
+        public static TimeSpan NetworkTimeout { get; set; }
+
+        /// <summary>
         /// Initializes default values.
         /// </summary>
         static Properties()
         {
+            NetworkTimeout = TimeSpan.FromMilliseconds(2000);
             RingSize = 3;
             ReplicationFactor = 2;
         }

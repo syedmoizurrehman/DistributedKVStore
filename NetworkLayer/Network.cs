@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NetworkLayer
@@ -68,15 +69,27 @@ namespace NetworkLayer
         /// <returns></returns>
         public static async Task SendAsync(IPAddress receiverAddress, int port, byte[] message)
         {
-            IPEndPoint remoteEndPoint = new IPEndPoint(receiverAddress, port);
+            IPEndPoint RemoteEndPoint = new IPEndPoint(receiverAddress, port);
 
             var ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            await ClientSocket.ConnectAsync(remoteEndPoint);
+            using (var TimeoutCancellationTokenSource = new CancellationTokenSource())
+            {
+                var T = ClientSocket.ConnectAsync(RemoteEndPoint);
+                var CompletedTask = Task.WhenAny(T, Task.Delay(Properties.NetworkTimeout, TimeoutCancellationTokenSource.Token));
+                if (CompletedTask == T)
+                {
+                    await T;
+                    await ClientSocket.SendAsync(message);
 
-            await ClientSocket.SendAsync(message);
+                    ClientSocket.Shutdown(SocketShutdown.Both);
+                    ClientSocket.Close();
+                }
+                else    // Timed out.
+                {
+                    ClientSocket.Close();
 
-            ClientSocket.Shutdown(SocketShutdown.Both);
-            ClientSocket.Close();
+                }
+            }
         }
 
         /// <summary>
@@ -91,15 +104,28 @@ namespace NetworkLayer
             Socket SenderSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             SenderSocket.Bind(LocalEndPoint);
             SenderSocket.Listen(100);
-            Socket HandlerSocket = await SenderSocket.AcceptAsync();
-            int X = await HandlerSocket.ReceiveAsync(Buffer);
-            Console.WriteLine(X + " bytes received.");
-            //SenderSocket.Shutdown(SocketShutdown.Both);
-            SenderSocket.Close();
-            byte[] ActualDataReceived = new byte[X];
-            Array.Copy(Buffer, 0, ActualDataReceived, 0, X);
-            Console.WriteLine(Encoding.ASCII.GetString(ActualDataReceived));
-            return ActualDataReceived;
+            using (var TimeoutCancellationTokenSource = new CancellationTokenSource())
+            {
+                var T = SenderSocket.AcceptAsync();
+                var CompletedTask = await Task.WhenAny(T, Task.Delay(Properties.NetworkTimeout, TimeoutCancellationTokenSource.Token));
+                if (CompletedTask == T)
+                {
+                    Socket HandlerSocket = await T;
+                    int X = await HandlerSocket.ReceiveAsync(Buffer);
+                    Console.WriteLine(X + " bytes received.");
+                    //SenderSocket.Shutdown(SocketShutdown.Both);
+                    SenderSocket.Close();
+                    byte[] ActualDataReceived = new byte[X];
+                    Array.Copy(Buffer, 0, ActualDataReceived, 0, X);
+                    Console.WriteLine(Encoding.ASCII.GetString(ActualDataReceived));
+                    return ActualDataReceived;
+                }
+                else    // Timed out.
+                {
+                    SenderSocket.Close();
+                    return null;
+                }
+            }
         }
     }
 }
