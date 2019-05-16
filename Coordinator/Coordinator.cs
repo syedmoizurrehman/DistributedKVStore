@@ -1,6 +1,7 @@
 ﻿using ApplicationLayer;
 using System;
 using System.Collections.Generic;
+using System.Deployment.Application;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -23,6 +24,19 @@ namespace Coordinator
         {
             try
             {
+                if (args == null || args.Length == 0)
+                {
+                    string[] TempArgs = null;
+                    if (ApplicationDeployment.IsNetworkDeployed)
+                    {
+                        var InputArgs = AppDomain.CurrentDomain.SetupInformation.ActivationArguments.ActivationData;
+                        if (InputArgs != null && InputArgs.Length > 0)
+                            TempArgs = InputArgs[0].Split(new char[] { ' ' });
+                        args = TempArgs;
+                    }
+                }
+                if (args == null || args.Length < 1) throw new Exception("No command line arguments detected.");
+
                 string CoordinatorAddress = args[0].Remove(0, 1);       // Remove '-' from the argument.
                 bool IsClient = false;
                 if (args.Length >= 2 && args[1].Equals("-client"))
@@ -85,10 +99,12 @@ namespace Coordinator
             catch (Exception E)
             {
                 Console.WriteLine(E.Message);
+                Console.WriteLine(E.StackTrace);
             }
             finally
             {
                 Console.WriteLine("Exiting the program.");
+                Console.ReadKey();
             }
             return 0;
         }

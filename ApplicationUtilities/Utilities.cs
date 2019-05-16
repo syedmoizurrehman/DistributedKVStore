@@ -29,7 +29,7 @@ namespace AppUtilities
         /// </summary>
         static Properties()
         {
-            NetworkTimeout = TimeSpan.FromMilliseconds(2000);
+            NetworkTimeout = TimeSpan.FromMilliseconds(10000);
             RingSize = 3;
             ReplicationFactor = 2;
         }
