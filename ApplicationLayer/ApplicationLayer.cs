@@ -693,16 +693,16 @@ namespace ApplicationLayer
 
         internal Task InitiateGossip(Node newNode)
         {
-            if (RingSize < 2)
+            //if (RingSize < 2)
                 return Task.CompletedTask;
 
-            Console.WriteLine("Initiating Gossip protocol.");
-            // Send a random node the information of the new node.
-            int RandomIdIndex;
-            do RandomIdIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(1, NodeNetwork.Count);
-            while (RandomIdIndex == newNode.Index);       // If the random generated node is new node, generate a different index.
+            //Console.WriteLine("Initiating Gossip protocol.");
+            //// Send a random node the information of the new node.
+            //int RandomIdIndex;
+            //do RandomIdIndex = ThreadSafeRandom.CurrentThreadsRandom.Next(1, NodeNetwork.Count);
+            //while (RandomIdIndex == newNode.Index);       // If the random generated node is new node, generate a different index.
 
-            return SendIntroduction(NodeNetwork.Keys.ElementAt(RandomIdIndex), newNode.Index);
+            //return SendIntroduction(NodeNetwork.Keys.ElementAt(RandomIdIndex), newNode.Index);
         }
 
         private void UpdateNodeNetwork(Dictionary<int, Node> nodeNetwork)

@@ -581,7 +581,7 @@ namespace ApplicationLayer
 
                                 case MessageType.JoinIntroduction:
                                     NewMessage.NewNode = new Node { Index = Convert.ToInt32(Line) };
-                                    Line = Reader.ReadLine().Split(':')[1].Trim();
+                                    //Line = Reader.ReadLine().Split(':')[1].Trim();
                                     //NewMessage.GossipCount = Convert.ToInt32(Line);     // Decrement the Gossip count to indicate the successful receipt of gossip.
                                     break;
 
