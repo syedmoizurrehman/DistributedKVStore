@@ -43,16 +43,11 @@ namespace ApplicationLayer
 
         public NodeStatus Status { get; set; }
 
-        private DateTimeOffset _LastUpdated;
         /// <summary>
         /// Represents when the information of this node was last updated. 
         /// Must only be used for nodes which are stored as network in another host node.
         /// </summary>
-        public DateTimeOffset LastUpdated
-        {
-            get { if (!IsHost) throw new Exception(nameof(LastUpdated) + " cannot be used for host machines."); return _LastUpdated; }
-            set { if (!IsHost) throw new Exception(nameof(LastUpdated) + " cannot be used for host machines."); _LastUpdated = value; }
-        }
+        public DateTimeOffset LastUpdated { get; set; }
 
         /// <summary>
         /// Delay in ms after which the node will check for new messages.
@@ -147,7 +142,9 @@ namespace ApplicationLayer
                         break;
 
                     case NodeStatus.Node:   // Only knows Coord's IP, nothing about the node network at this point.
-                        UpdateNodeNetwork(new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress });
+                        var N = new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress };
+                        await N.Initialize();
+                        UpdateNodeNetwork(N);
                         await NodeNetwork[0].Initialize();
                         await SendJoinRequest();
                         Message M;
@@ -480,7 +477,7 @@ namespace ApplicationLayer
             return SendAsync(nodeIndex, M);
         }
 
-        private Task SendKeyQuery(int nodeIndex, string key)
+        public Task SendKeyQuery(int nodeIndex, string key)
         {
             var M = Message.ConstructKeyQuery(this, NodeNetwork[nodeIndex], NodeNetwork, key);
             return SendAsync(nodeIndex, M);
@@ -716,7 +713,7 @@ namespace ApplicationLayer
                 {
                     if (nodeNetwork[Key].LastUpdated > NodeNetwork[Key].LastUpdated)
                     {
-                        LogMessage($"Updating node {Key}. Ring Size = " + RingSize);
+                        LogMessage($"Updating node {Key}. Ring Size = " + RingSize + ". Update Time stamp: " + nodeNetwork[Key].LastUpdated);
                         NodeNetwork[Key] = nodeNetwork[Key];
                     }
                 }

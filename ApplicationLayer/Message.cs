@@ -433,7 +433,7 @@ namespace ApplicationLayer
                     if (Key == Source.Index)
                         Obj.Append("LAST-UPDATED:").AppendLine(DateTimeOffset.Now.ToUnixTimeSeconds().ToString());
                     else
-                        Obj.Append("LAST-UPDATED:").AppendLine(Convert.ToInt32(Network[Key].LastUpdated.ToUnixTimeSeconds()).ToString());
+                        Obj.Append("LAST-UPDATED:").AppendLine(Network[Key].LastUpdated.ToUnixTimeSeconds().ToString());
                 }
             }
 
@@ -538,7 +538,7 @@ namespace ApplicationLayer
                                 Line = Reader.ReadLine().Split(':')[1].Trim();
                                 N.IsDown = Line.Equals("1");
                                 Line = Reader.ReadLine().Split(':')[1].Trim();
-                                DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Line));
+                                N.LastUpdated = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Line));
                                 NewMessage.Network[N.Index] = N;
                             }
                             LineNo += NewMessage.Network.Count * 5;
