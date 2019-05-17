@@ -131,7 +131,7 @@ namespace ApplicationLayer
         /// <returns></returns>
         public static Message ConstructEmptyMessage()
         {
-            return new Message { Type = MessageType.Empty };
+            return new Message();
         }
 
         public static Message ConstructClientReadRequest(Node client, Node coordinator, string key)
@@ -397,7 +397,8 @@ namespace ApplicationLayer
 
         private Message()
         {
-            //Network = new List<Node>();
+            Type = MessageType.Empty;
+            KeyTimestamp = DateTimeOffset.MinValue;
         }
 
         /// <summary>
@@ -424,11 +425,15 @@ namespace ApplicationLayer
             {
                 foreach (int Key in Network.Keys)
                 {
-                    if (Key == -1) continue;    // Skip client's info
+                    if (Key == -1) continue;    // Skip client and host nodes.
                     Obj.Append("ID:").AppendLine(Network[Key].Index.ToString());
                     Obj.Append("STATUS:").AppendLine(Network[Key].Status.ToString());
                     Obj.Append("ADDRESS:").AppendLine(Network[Key].Address.ToString());
                     Obj.Append("IS-DOWN:").AppendLine(Convert.ToInt32(Network[Key].IsDown).ToString());
+                    if (Key == Source.Index)
+                        Obj.Append("LAST-UPDATED:").AppendLine(DateTimeOffset.Now.ToUnixTimeSeconds().ToString());
+                    else
+                        Obj.Append("LAST-UPDATED:").AppendLine(Convert.ToInt32(Network[Key].LastUpdated.ToUnixTimeSeconds()).ToString());
                 }
             }
 
@@ -467,7 +472,7 @@ namespace ApplicationLayer
 
                 case MessageType.JoinIntroduction:
                     Obj.Append("NEW-ID:").AppendLine(NewNode.Index.ToString());         // The id indicating the index of new node in network array. This will be used to get info. of new node from network sent with this message.
-                    Obj.Append("GOSSIP-COUNT:").AppendLine(GossipCount.ToString());     // This count will be decremented every time the message is received and sent to another node until the count reaches 0, at which point the gossip will stop.
+                    //Obj.Append("GOSSIP-COUNT:").AppendLine(GossipCount.ToString());     // This count will be decremented every time the message is received and sent to another node until the count reaches 0, at which point the gossip will stop.
                     break;
 
                 case MessageType.ClientWriteRequest:
@@ -532,9 +537,11 @@ namespace ApplicationLayer
                                 N.Address = IPAddress.Parse(Line);
                                 Line = Reader.ReadLine().Split(':')[1].Trim();
                                 N.IsDown = Line.Equals("1");
+                                Line = Reader.ReadLine().Split(':')[1].Trim();
+                                DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Line));
                                 NewMessage.Network[N.Index] = N;
                             }
-                            LineNo += NewMessage.Network.Count * 4;
+                            LineNo += NewMessage.Network.Count * 5;
                             break;
 
                         default:
@@ -575,7 +582,7 @@ namespace ApplicationLayer
                                 case MessageType.JoinIntroduction:
                                     NewMessage.NewNode = new Node { Index = Convert.ToInt32(Line) };
                                     Line = Reader.ReadLine().Split(':')[1].Trim();
-                                    NewMessage.GossipCount = Convert.ToInt32(Line) - 1;     // Decrement the Gossip count to indicate the successful receipt of gossip.
+                                    //NewMessage.GossipCount = Convert.ToInt32(Line);     // Decrement the Gossip count to indicate the successful receipt of gossip.
                                     break;
 
                                 case MessageType.ClientWriteRequest:

@@ -43,6 +43,17 @@ namespace ApplicationLayer
 
         public NodeStatus Status { get; set; }
 
+        private DateTimeOffset _LastUpdated;
+        /// <summary>
+        /// Represents when the information of this node was last updated. 
+        /// Must only be used for nodes which are stored as network in another host node.
+        /// </summary>
+        public DateTimeOffset LastUpdated
+        {
+            get { if (!IsHost) throw new Exception(nameof(LastUpdated) + " cannot be used for host machines."); return _LastUpdated; }
+            set { if (!IsHost) throw new Exception(nameof(LastUpdated) + " cannot be used for host machines."); _LastUpdated = value; }
+        }
+
         /// <summary>
         /// Delay in ms after which the node will check for new messages.
         /// </summary>
@@ -54,7 +65,8 @@ namespace ApplicationLayer
         public IPAddress Address { get; internal set; }
 
         /// <summary>
-        /// Represents all the <see cref="Node"/>s in the network. First item (Key: 0) will always be coordinator.
+        /// Represents all the <see cref="Node"/>s in the network. Keys 0 and -1 are reserved for coordinator and client respectively. 
+        /// Insertion/Updation must not be done on this directly. Use <see cref="UpdateNodeNetwork()"/> for this purpose
         /// </summary>
         public Dictionary<int, Node> NodeNetwork { get; }
 
@@ -72,7 +84,7 @@ namespace ApplicationLayer
         /// </summary>
         public static int GossipCount { get; internal set; }
 
-        private static List<int> GetHash(string key, int ringSize)
+        private static List<int> GetHash(string key, int ringSize, Dictionary<int, Node> nodeNetwork)
         {
             HashAlgorithm HashAlgo = HashAlgorithm.Create();
             HashAlgo.ComputeHash(Encoding.UTF8.GetBytes(key));
@@ -80,7 +92,7 @@ namespace ApplicationLayer
             for (int i = 0; i < AppProperties.ReplicationFactor; i++)
             {
                 int Index = Math.Abs(BitConverter.ToInt32(HashAlgo.Hash, i % HashAlgo.HashSize) % ringSize);
-                while (Indices.Contains(Index) || Index == 0)
+                while (Indices.Contains(Index) || nodeNetwork.Keys.ElementAt(Index) == 0 || nodeNetwork.Keys.ElementAt(Index) == -1)
                 {
                     Index++;
                     Index %= ringSize + 1;
@@ -95,6 +107,7 @@ namespace ApplicationLayer
             IsHost = false;
             IsDown = false;
             Index = -1;
+            LastUpdated = DateTimeOffset.MinValue;
         }
 
         public Node(IPAddress coordAddress, bool isHost = false, bool isClient = false)
@@ -104,6 +117,7 @@ namespace ApplicationLayer
             Index = -1;                             // -1 indicated unassigned ID.
             IsHost = isHost;
             IsDown = false;
+            LastUpdated = DateTimeOffset.MinValue;
             CoordinatorAddress = coordAddress;
             if (isClient)
                 Status = NodeStatus.Client;
@@ -128,12 +142,12 @@ namespace ApplicationLayer
                     case NodeStatus.Coordinator:
                         Index = 0;
                         // Add coordinator (self) to network list.
-                        NodeNetwork.Add(Index, this);
+                        UpdateNodeNetwork(this);
                         await SqliteDatabase.InitializeLookupTable();
                         break;
 
                     case NodeStatus.Node:   // Only knows Coord's IP, nothing about the node network at this point.
-                        NodeNetwork.Add(0, new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress });
+                        UpdateNodeNetwork(new Node(CoordinatorAddress) { Status = NodeStatus.Coordinator, Address = CoordinatorAddress });
                         await NodeNetwork[0].Initialize();
                         await SendJoinRequest();
                         Message M;
@@ -147,7 +161,7 @@ namespace ApplicationLayer
 
                     case NodeStatus.Client:
                         Index = -1;
-                        NodeNetwork.Add(0, new Node
+                        UpdateNodeNetwork(new Node
                         {
                             Address = CoordinatorAddress,
                             Status = NodeStatus.Coordinator,
@@ -174,7 +188,7 @@ namespace ApplicationLayer
             }
         }
 
-        public async Task<bool> Delete(string key)
+        public async Task<bool> Delete(string key, bool stabilize = true)
         {
             switch (Status)
             {
@@ -187,34 +201,40 @@ namespace ApplicationLayer
                     CoordinatorLookupTable Lookup = await SqliteDatabase.GetLookupEntryAsync(key);
                     if (Lookup == null)
                     {
-                        Console.WriteLine("Key not found.");
+                        LogMessage("Key was not found in Coordinator lookup.");
                         return false;
                     }
                     // Use the RingSize from when the key was last updated/written.
                     int KeyRingSize = Lookup.RingSize;
-                    if (Lookup.RingSize != RingSize)
-                    {
-                        // Key-Node mapping is different.
-                        // TODO: Delete database records from nodes with keys having old ring size
-                        // Insert them into nodes mapped to new ring size.
-                    }
-                    List<int> ReplicaIndices = GetHash(key, KeyRingSize);
-                    List<Message> Responses = new List<Message>();
+                    if (stabilize && Lookup.RingSize != RingSize)
+                        await Stabilize(key);
+
+                    List<int> ReplicaIndices = GetHash(key, KeyRingSize, NodeNetwork);
                     for (int i = 0; i < KeyRingSize/*AppProperties.RingSize*/; i++)
                     {
-                        await SendDeleteRequest(NodeNetwork.Keys.ElementAt(ReplicaIndices[i]), key);
-                        var Response = await ListenAsync();
-                        if (Response.Type == MessageType.FailureIndication)
+                        int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
+                        await SendDeleteRequest(NodeId, key);
+                        Message Response = await ListenAsync();
+                        if (Response != null)
                         {
-                            Console.WriteLine("Failed to delete key. " + Response.FailureMessage);
-                            return false;
+                            NodeNetwork[NodeId].IsDown = false;
+                            if (Response.Type == MessageType.FailureIndication)
+                            {
+                                LogMessage("Failed to delete key. " + Response.FailureMessage, NodeNetwork[NodeId]);
+                                return false;
+                            }
+                            else
+                                LogMessage("Key deleted successfully from replica# " + i + 1 + " out of " + KeyRingSize, NodeNetwork[NodeId]);
                         }
                         else
-                            Console.WriteLine("Key deleted successfully from replica# " + i + 1 + " out of " + KeyRingSize);
+                        {
+                            NodeNetwork[NodeId].IsDown = true;
+                            LogMessage("Node is down.", NodeNetwork[NodeId]);
+                        }
                     }
-                    Console.WriteLine("Deleting Coordinator lookup...");
+                    LogMessage("Deleting Coordinator lookup...");
                     await SqliteDatabase.DeleteLookupEntry(key);
-                    Console.WriteLine("Deleting successful.");
+                    LogMessage("Coordinator lookup deleted successfully.");
                     return true;
 
                 case NodeStatus.Client:
@@ -223,6 +243,43 @@ namespace ApplicationLayer
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Stabilization algorithm to restore broken key-node mappings on a specified key.
+        /// </summary>
+        /// <param name="key"></param>
+        /// <returns>True if operation was successful, otherwise false.</returns>
+        public async Task<bool> Stabilize(string key)
+        {
+            if (Status != NodeStatus.Coordinator) throw new Exception("Stabilize called on non-coordinator node.");
+            /*
+            Delete key on all nodes using Lookup.RingSize for hashing
+            Add key to all nodes using RingSize
+            */
+            LogMessage("Initiating stabilization. Getting database records from outdated mappings...");
+            var Record = await Read(key, false);
+            if (Record == null)
+            {
+                LogMessage("Stabilization failure. Failed to retrieve records from outdated mappings.");
+                return false;
+            }
+            LogMessage("Outdated mappings retrieved. Proceeding to delete retrieved record...");
+            if (!await Delete(key, false))
+            {
+                LogMessage("Stabilization failure. Failed to delete retrieve record from outdated mappings.");
+                return false;
+            }
+            LogMessage("Succesfully deleted record from outdated mappings. Proceeding to write record with updated mappings...");
+            if (!await Write(key, Record.Value))
+            {
+                LogMessage("Stabilization failure. Failed to write records with updated mappings.");    // TODO: Restore back the outdated mappings to prevent loss.
+                return false;
+            }
+            LogMessage("Successfully written record with updated mappings. Updating Coordinator Lookup entry...");
+            await SqliteDatabase.UpdateLookupEntry(key, RingSize);
+            LogMessage("Successfully updated Coordinator Lookup entry. Stabilization successful.");
+            return true;
         }
 
         private Task SendDeleteRequest(int nodeId, string key)
@@ -253,22 +310,30 @@ namespace ApplicationLayer
                     }
 
                 case NodeStatus.Coordinator:
-                    Console.WriteLine("Contacting quorum nodes for the given key...");
-                    List<int> ReplicaIndices = GetHash(key, RingSize);
-                    List<Message> Responses = new List<Message>();
+                    LogMessage("Contacting replica nodes for the given key...");
+                    List<int> ReplicaIndices = GetHash(key, RingSize, NodeNetwork);
                     for (int i = 0; i < RingSize; i++)
                     {
+                        int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         Message Response;
-                        await SendWriteRequest(NodeNetwork.Keys.ElementAt(ReplicaIndices[i]), key, value);
+                        await SendWriteRequest(NodeId, key, value);
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
-                        Console.WriteLine("Received response from " + (i+1).ToString() + " Node.");
-                        if (Response.Type == MessageType.FailureIndication)
+                        if (Response != null)
                         {
-                            Console.WriteLine(Response.FailureMessage);
-                            return false;
+                            NodeNetwork[NodeId].IsDown = false;
+                            LogMessage("Received response from key replica.", NodeNetwork[NodeId]);
+                            if (Response.Type == MessageType.FailureIndication)
+                            {
+                                LogMessage("Failed to write key. " + Response.FailureMessage, NodeNetwork[NodeId]);
+                                return false;
+                            }
                         }
-                        Responses.Add(Response);
+                        else
+                        {
+                            NodeNetwork[NodeId].IsDown = true;
+                            LogMessage("Node is down.", NodeNetwork[NodeId]);
+                        }
                     }
                     Console.WriteLine("Key-Value pair inserted.");
                     await SqliteDatabase.InsertLookupEntry(key, RingSize);
@@ -295,50 +360,59 @@ namespace ApplicationLayer
             }
         }
 
-        public async Task<KVTable> Read(string key)
+        public async Task<KVTable> Read(string key, bool stabilize = true)
         {
             switch (Status)
             {
                 case NodeStatus.Node:
-                    Console.WriteLine("Reading from database...");
+                    LogMessage("Reading from database...");
                     var ReadResult = await SqliteDatabase.GetValueAsync(key);
-                    Console.WriteLine("Finished reading from database...");
+                    LogMessage("Database read succesfull.");
                     return ReadResult;
 
                 case NodeStatus.Coordinator:
                     CoordinatorLookupTable Lookup = await SqliteDatabase.GetLookupEntryAsync(key);
                     if (Lookup == null)
                     {
-                        Console.WriteLine("Key not found.");
+                        LogMessage("Key not found.");
                         return null;
                     }
                     // Use the RingSize from when the key was last updated/written.
                     int KeyRingSize = Lookup.RingSize;
-                    if (Lookup.RingSize != RingSize)
-                    {
-                        // Key-Node mapping is different.
-                        // TODO: Delete database records from nodes with keys having old ring size
-                        // Insert them into nodes mapped to new ring size.
-                    }
+                    if (stabilize && Lookup.RingSize != RingSize)
+                        await Stabilize(key);
 
-                    List<int> ReplicaIndices = GetHash(key, KeyRingSize);
+                    List<int> ReplicaIndices = GetHash(key, KeyRingSize, NodeNetwork);
                     List<Message> Responses = new List<Message>();
                     DateTimeOffset MaxTimeStamp = DateTimeOffset.MinValue;
+
+                    // Most updated Replica index
                     int LatestIndex = -1;
                     for (int i = 0; i < KeyRingSize/*AppProperties.RingSize*/; i++)
                     {
-                        await SendKeyRequest(NodeNetwork.Keys.ElementAt(ReplicaIndices[i]), key);
+                        int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
+                        await SendKeyRequest(NodeId, key);
                         Message Response;
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.KeyAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
-                        if (string.IsNullOrEmpty(Response.Key))
-                            continue;
-
-                        Responses.Add(Response);
-                        if (Response.KeyTimestamp > MaxTimeStamp)
+                        if (Response != null)
                         {
-                            MaxTimeStamp = Response.KeyTimestamp;
-                            LatestIndex = i;
+                            NodeNetwork[NodeId].IsDown = false;
+                            if (!string.IsNullOrEmpty(Response.Key))
+                            {
+                                Responses.Add(Response);
+                                if (Response.KeyTimestamp > MaxTimeStamp)
+                                {
+                                    MaxTimeStamp = Response.KeyTimestamp;
+                                    LatestIndex = i;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            NodeNetwork[NodeId].IsDown = true;
+                            LogMessage("Node is down.", NodeNetwork[NodeId]);
+                            Responses.Add(Message.ConstructEmptyMessage());     // Add empty message to make loop index work with LatestIndex.
                         }
                     }
                     if (LatestIndex == -1)
@@ -351,17 +425,18 @@ namespace ApplicationLayer
                     return new KVTable { Key = key, Value = ValueResponse.Value, TimeStamp = ValueResponse.KeyTimestamp };
 
                 case NodeStatus.Client:
-                    Console.WriteLine("Requesting Coordinator for the key...");
+                    LogMessage("Requesting Coordinator for the key...");
                     await SendClientReadRequest(key);
                     Message CoordResponse;
                     /*do*/ CoordResponse = await ListenAsync();
                     //while (CoordResponse.Type != MessageType.ClientReadResponse && CoordResponse.Source.Address != CoordinatorAddress);
                     if (CoordResponse.Type == MessageType.FailureIndication)
                     {
-                        Console.WriteLine(CoordResponse.FailureMessage);
+                        LogMessage(CoordResponse.FailureMessage, NodeNetwork[0]);
                         return null;
                     }
-                    Console.WriteLine("Read successful.");
+                    LogMessage("Read successful.");
+                    Console.WriteLine();
                     return new KVTable { Key = CoordResponse.Key, Value = CoordResponse.Value, TimeStamp = CoordResponse.KeyTimestamp };
             }
             return null;
@@ -477,9 +552,10 @@ namespace ApplicationLayer
         public async Task<Message> ListenAsync()
         {
             byte[] Result = await Network.ListenAsync(AppProperties.PortNumber);
-            if (Result == null)
-                return Message.ConstructEmptyMessage();
-            return Message.Deserialize(Encoding.ASCII.GetString(Result));
+            if (Result == null) return Message.ConstructEmptyMessage();
+            var M = Message.Deserialize(Encoding.ASCII.GetString(Result));
+            //UpdateNodeNetwork(M.Source);
+            return M;
         }
 
         /// <summary>
@@ -599,8 +675,8 @@ namespace ApplicationLayer
                             case MessageType.JoinIntroduction:
                                 Console.WriteLine("Received introduction of a new node. Initiating Gossip protocol.");
                                 UpdateNodeNetwork(M.Network);
-                                if (M.GossipCount > 0)
-                                    await InitiateGossip(NodeNetwork[M.NewNode.Index]) /*SendIntroduction(NodeNetwork.Count - 1)*/;
+                                //if (M.GossipCount > 0)
+                                    //await InitiateGossip(NodeNetwork[M.NewNode.Index]) /*SendIntroduction(NodeNetwork.Count - 1)*/;
                                 break;
 
                             case MessageType.Empty:     // Timed out.
@@ -620,7 +696,7 @@ namespace ApplicationLayer
 
         internal Task InitiateGossip(Node newNode)
         {
-            if (NodeNetwork.Count < 3)
+            if (RingSize < 2)
                 return Task.CompletedTask;
 
             Console.WriteLine("Initiating Gossip protocol.");
@@ -636,12 +712,18 @@ namespace ApplicationLayer
         {
             foreach (int Key in nodeNetwork.Keys)
             {
-                if (NodeNetwork.ContainsKey(nodeNetwork[Key].Index))
-                    NodeNetwork[nodeNetwork[Key].Index] = nodeNetwork[Key];
+                if (NodeNetwork.ContainsKey(Key))
+                {
+                    if (nodeNetwork[Key].LastUpdated > NodeNetwork[Key].LastUpdated)
+                    {
+                        LogMessage($"Updating node {Key}. Ring Size = " + RingSize);
+                        NodeNetwork[Key] = nodeNetwork[Key];
+                    }
+                }
                 else
                 {
                     NodeNetwork.Add(nodeNetwork[Key].Index, nodeNetwork[Key]);
-                    Console.WriteLine("Adding node to network. Ring Size = " + RingSize);
+                    LogMessage($"Adding node {Key} to network. Ring Size = " + RingSize);
                 }
             }
         }
@@ -649,12 +731,25 @@ namespace ApplicationLayer
         private void UpdateNodeNetwork(Node newNode)
         {
             if (NodeNetwork.ContainsKey(newNode.Index))
+            {
                 NodeNetwork[newNode.Index] = newNode;
+                LogMessage($"Update node {newNode.Index}. Ring Size = " + RingSize);
+            }
             else
             {
                 NodeNetwork.Add(newNode.Index, newNode);
-                Console.WriteLine($"Adding node {Index} to network. Ring Size = " + RingSize);
+                LogMessage($"Adding node {newNode.Index} to network. Ring Size = " + RingSize);
             }
+        }
+
+        private void LogMessage(string message, Node node = null)
+        {
+            Console.WriteLine("--");
+            Console.WriteLine(message);
+            Console.WriteLine("Host ID: " + Index);
+            if (node != null)
+                Console.WriteLine("Remote Node ID: " + node.Index);
+            Console.WriteLine("--");
         }
     }
 }
