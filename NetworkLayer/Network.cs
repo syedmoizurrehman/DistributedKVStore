@@ -97,7 +97,7 @@ namespace NetworkLayer
         /// </summary>
         /// <param name="port"></param>
         /// <returns></returns>
-        public static async Task<byte[]> ListenAsync(int port)
+        public static async Task<byte[]> ListenAsync(int port, bool isClient = false)
         {
             var Buffer = new byte[65536];
             IPEndPoint LocalEndPoint = new IPEndPoint(IPAddress.Any, port);
@@ -107,7 +107,9 @@ namespace NetworkLayer
             using (var TimeoutCancellationTokenSource = new CancellationTokenSource())
             {
                 var T = SenderSocket.AcceptAsync();
-                var CompletedTask = await Task.WhenAny(T, Task.Delay(Properties.NetworkTimeout, TimeoutCancellationTokenSource.Token));
+                var CompletedTask = await Task.WhenAny(T, Task.Delay(
+                    isClient ? Properties.NetworkTimeout + TimeSpan.FromSeconds(5) : Properties.NetworkTimeout,
+                    TimeoutCancellationTokenSource.Token));
                 if (CompletedTask == T)
                 {
                     Socket HandlerSocket = await T;

@@ -574,7 +574,7 @@ Listen:             Message ValueResponse;
 
         public async Task<Message> ListenAsync()
         {
-            byte[] Result = await Network.ListenAsync(AppProperties.PortNumber);
+            byte[] Result = await Network.ListenAsync(AppProperties.PortNumber, Status == NodeStatus.Client);
             if (Result == null) return Message.ConstructEmptyMessage();
             var M = Message.Deserialize(Encoding.ASCII.GetString(Result));
             //UpdateNodeNetwork(M.Source);
