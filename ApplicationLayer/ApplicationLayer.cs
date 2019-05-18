@@ -399,6 +399,7 @@ namespace ApplicationLayer
                         {
                             NodeNetwork[NodeId].IsDown = true;
                             LogMessage("Node is down.", NodeNetwork[NodeId]);
+                            Responses.Add(Message.ConstructEmptyMessage());     // Add empty message to make loop index work with LatestIndex.
                             continue;
                         }
                         Message Response;
