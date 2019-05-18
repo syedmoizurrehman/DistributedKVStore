@@ -207,7 +207,7 @@ namespace ApplicationLayer
                         await Stabilize(key);
 
                     List<int> ReplicaIndices = GetHash(key, KeyRingSize, NodeNetwork);
-                    for (int i = 0; i < KeyRingSize/*AppProperties.RingSize*/; i++)
+                    for (int i = 0; i < KeyRingSize; i++)
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         await SendDeleteRequest(NodeId, key);
@@ -294,15 +294,15 @@ namespace ApplicationLayer
             switch (Status)
             {
                 case NodeStatus.Node:
-                    Console.WriteLine("Writing to database...");
+                    LogMessage("Writing to database...");
                     if (await SqliteDatabase.InsertKeyValuePairAsync(key, value))
                     {
-                        Console.WriteLine("Write completed successfully.");
+                        LogMessage("Write completed successfully.");
                         return true;
                     }
                     else
                     {
-                        Console.WriteLine("Failed to write to database. Key already exists.");
+                        LogMessage("Failed to write to database. Key already exists.");
                         return false;
                     }
 
@@ -313,7 +313,13 @@ namespace ApplicationLayer
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         Message Response;
-                        await SendWriteRequest(NodeId, key, value);
+                        try { await SendWriteRequest(NodeId, key, value); }
+                        catch (TimeoutException)
+                        {
+                            NodeNetwork[NodeId].IsDown = true;
+                            LogMessage("Node is down.", NodeNetwork[NodeId]);
+                            continue;
+                        }
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.WriteAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
                         if (Response != null)
@@ -332,24 +338,24 @@ namespace ApplicationLayer
                             LogMessage("Node is down.", NodeNetwork[NodeId]);
                         }
                     }
-                    Console.WriteLine("Key-Value pair inserted.");
+                    LogMessage("Key-Value pair inserted.");
                     await SqliteDatabase.InsertLookupEntry(key, RingSize);
                     return true;
 
                 case NodeStatus.Client:
-                    Console.WriteLine("Requesting Coordinator for database write...");
+                    LogMessage("Requesting Coordinator for database write...");
                     await SendClientWriteRequest(key, value);
                     Message CoordResponse;
                     /*do*/ CoordResponse = await ListenAsync();
                     //while (CoordResponse.Type != MessageType.ClientWriteResponse && CoordResponse.Source.Address != CoordinatorAddress);
                     if (CoordResponse.Type == MessageType.FailureIndication)
                     {
-                        Console.WriteLine(CoordResponse.FailureMessage);
+                        LogMessage(CoordResponse.FailureMessage);
                         return false;
                     }
                     else
                     {
-                        Console.WriteLine("Write successful.");
+                        LogMessage("Write successful.");
                         return true;
                     }
                 default:
@@ -385,10 +391,16 @@ namespace ApplicationLayer
 
                     // Most updated Replica index
                     int LatestIndex = -1;
-                    for (int i = 0; i < KeyRingSize/*AppProperties.RingSize*/; i++)
+                    for (int i = 0; i < KeyRingSize; i++)
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
-                        await SendKeyRequest(NodeId, key);
+                        try { await SendKeyRequest(NodeId, key); }
+                        catch (TimeoutException)
+                        {
+                            NodeNetwork[NodeId].IsDown = true;
+                            LogMessage("Node is down.", NodeNetwork[NodeId]);
+                            continue;
+                        }
                         Message Response;
                         /*do*/ Response = await ListenAsync();
                         //while (Response.Type != MessageType.KeyAcknowledgement || !ReplicaIndices.Contains(Response.Source.Index));
@@ -415,8 +427,22 @@ namespace ApplicationLayer
                     if (LatestIndex == -1)
                         return null;        // Key was not found on any replica.
 
-                    await SendKeyQuery(Responses[LatestIndex].Source.Index, key);
-                    Message ValueResponse;
+                    try { await SendKeyQuery(Responses[LatestIndex].Source.Index, key); }
+                    catch (TimeoutException)        // Most updated replica is down. Query all other nodes to get record.
+                    {
+                        NodeNetwork[Responses[LatestIndex].Source.Index].IsDown = true;
+                        LogMessage("Node is down.", NodeNetwork[Responses[LatestIndex].Source.Index]);
+                        foreach (var M in Responses)
+                        {
+                            if (M == Responses[LatestIndex])
+                                continue;
+                            try { await SendKeyQuery(M.Source.Index, key); }
+                            catch (TimeoutException) { continue; }
+                            goto Listen;   // Jump to listening code.
+                        }
+                        return null;
+                    }
+Listen:             Message ValueResponse;
                     /*do*/ ValueResponse = await ListenAsync();
                     //while (ValueResponse.Type != MessageType.ValueResponse && !ReplicaIndices.Contains(ValueResponse.Source.Index));
                     return new KVTable { Key = key, Value = ValueResponse.Value, TimeStamp = ValueResponse.KeyTimestamp };
