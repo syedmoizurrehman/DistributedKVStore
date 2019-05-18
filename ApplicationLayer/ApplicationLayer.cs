@@ -35,9 +35,15 @@ namespace ApplicationLayer
             get
             {
                 if (NodeNetwork.ContainsKey(-1))
-                    return NodeNetwork.Count - 2;
+                {
+                    //return NodeNetwork.Count - 2;
+                    return NodeNetwork.Count - 2 - NodeNetwork.Values.Where(x => x.IsDown).Count();
+                }
                 else
-                    return NodeNetwork.Count - 1;
+                {
+                    //return NodeNetwork.Count - 1;
+                    return NodeNetwork.Count - 1 - NodeNetwork.Values.Where(x => x.IsDown).Count();
+                }
             }
         }
 
@@ -206,8 +212,8 @@ namespace ApplicationLayer
                     if (stabilize && Lookup.RingSize != RingSize)
                         await Stabilize(key);
 
-                    List<int> ReplicaIndices = GetHash(key, KeyRingSize, NodeNetwork);
-                    for (int i = 0; i < KeyRingSize; i++)
+                    List<int> ReplicaIndices = GetHash(key, RingSize, NodeNetwork);
+                    for (int i = 0; i < RingSize; i++)
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         await SendDeleteRequest(NodeId, key);
@@ -309,7 +315,7 @@ namespace ApplicationLayer
                 case NodeStatus.Coordinator:
                     LogMessage("Contacting replica nodes for the given key...");
                     List<int> ReplicaIndices = GetHash(key, RingSize, NodeNetwork);
-                    for (int i = 0; i < RingSize; i++)
+                    for (int i = 0; i < AppProperties.ReplicationFactor; i++)
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         Message Response;
@@ -382,16 +388,16 @@ namespace ApplicationLayer
                     }
                     // Use the RingSize from when the key was last updated/written.
                     int KeyRingSize = Lookup.RingSize;
-                    if (stabilize && Lookup.RingSize != RingSize)
-                        await Stabilize(key);
+                    //if (stabilize && Lookup.RingSize != RingSize)
+                        //await Stabilize(key);
 
-                    List<int> ReplicaIndices = GetHash(key, KeyRingSize, NodeNetwork);
+                    List<int> ReplicaIndices = GetHash(key, RingSize, NodeNetwork);
                     List<Message> Responses = new List<Message>();
                     DateTimeOffset MaxTimeStamp = DateTimeOffset.MinValue;
 
                     // Most updated Replica index
                     int LatestIndex = -1;
-                    for (int i = 0; i < KeyRingSize; i++)
+                    for (int i = 0; i < AppProperties.ReplicationFactor; i++)
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         try { await SendKeyRequest(NodeId, key); }
@@ -570,6 +576,7 @@ Listen:             Message ValueResponse;
 
         public Task SendAsync(int nodeIndex, Message message)
         {
+            if (NodeNetwork[nodeIndex].IsDown) throw new TimeoutException();
             return Network.SendAsync(NodeNetwork[nodeIndex].Address, AppProperties.PortNumber, Encoding.ASCII.GetBytes(message.Serialize()));
         }
 
