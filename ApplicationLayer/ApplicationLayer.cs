@@ -213,7 +213,7 @@ namespace ApplicationLayer
                         await Stabilize(key);
 
                     List<int> ReplicaIndices = GetHash(key, RingSize, NodeNetwork);
-                    for (int i = 0; i < RingSize; i++)
+                    for (int i = 0; i < KeyRingSize; i++)
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         await SendDeleteRequest(NodeId, key);
@@ -397,7 +397,7 @@ namespace ApplicationLayer
 
                     // Most updated Replica index
                     int LatestIndex = -1;
-                    for (int i = 0; i < AppProperties.ReplicationFactor; i++)
+                    for (int i = 0; i < KeyRingSize; i++)
                     {
                         int NodeId = NodeNetwork.Keys.ElementAt(ReplicaIndices[i]);
                         try { await SendKeyRequest(NodeId, key); }
