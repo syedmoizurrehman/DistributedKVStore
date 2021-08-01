@@ -1,5 +1,5 @@
 # Distributed Key-Value Data Store
-A distributed Key-Value data store based on Apache's Cassendra using C#.
+A distributed Key-Value data store based on Apache's Cassandra using C#.
 
 ## Project Structure
 The project consists of Application layer, Network layer, Data Access layer and an interface layer.
